@@ -1,0 +1,598 @@
+{
+  "metadata": {
+    "title": "Flowex - Product Requirements Document",
+    "version": "1.0",
+    "date": "2026-01-18",
+    "status": "MVP Definition",
+    "author": "Product Team"
+  },
+  "product": {
+    "name": "Flowex",
+    "tagline": "AI-Powered P&ID Digitization Platform",
+    "description": "Flowex uses computer vision and OCR to convert legacy PDF P&IDs into intelligent AutoCAD drawings and structured engineering data lists.",
+    "vision": "Democratize P&ID digitization for mid-size engineering firms, making intelligent drawing conversion accessible, affordable, and accurate."
+  },
+  "target_market": {
+    "industry": {
+      "primary": "Waste-to-Energy",
+      "secondary": "Environmental Services"
+    },
+    "company_type": "EPC (Engineering, Procurement, Construction)",
+    "company_size": {
+      "employees_min": 50,
+      "employees_max": 200
+    },
+    "geography": "Europe (EU + UK)",
+    "annual_revenue_range": {
+      "min": "€5M",
+      "max": "€50M"
+    }
+  },
+  "user_personas": [
+    {
+      "id": "process_engineer",
+      "name": "Process Engineer",
+      "role": "Senior Process Engineer",
+      "is_primary": true,
+      "demographics": {
+        "age_range": "35-45",
+        "location": "Germany",
+        "tech_comfort": "High"
+      },
+      "responsibilities": [
+        "Design process systems",
+        "Create and review P&IDs",
+        "Ensure technical accuracy"
+      ],
+      "pain_points": [
+        "Manually recreating legacy P&IDs",
+        "Verifying equipment lists",
+        "Tracking changes between revisions"
+      ],
+      "goals": [
+        "Reduce time on tedious conversion work",
+        "Focus on actual engineering",
+        "Improve accuracy of extracted data"
+      ],
+      "user_stories": [
+        {
+          "story": "As a Process Engineer, I want to convert client PDF P&IDs into editable AutoCAD format so that I can modify designs for new projects without starting from scratch.",
+          "acceptance_criteria": [
+            "Can upload PDF P&IDs (vector or scanned)",
+            "Can review extracted symbols and text side-by-side with original",
+            "Can correct any AI mistakes before export",
+            "Can download AutoCAD DWG/DXF file with correct layers"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "project_manager",
+      "name": "Project Manager",
+      "role": "Project Manager",
+      "is_primary": false,
+      "demographics": {
+        "age_range": "40-50",
+        "location": "Sweden",
+        "tech_comfort": "Medium"
+      },
+      "responsibilities": [
+        "Manage project timelines",
+        "Track deliverables",
+        "Report to clients"
+      ],
+      "pain_points": [
+        "Estimating conversion effort",
+        "Tracking drawing status",
+        "Generating progress reports"
+      ],
+      "goals": [
+        "Visibility into conversion progress",
+        "Accurate project planning",
+        "Easy client reporting"
+      ],
+      "user_stories": [
+        {
+          "story": "As a Project Manager, I want to see the status of all P&ID conversions in my project so that I can report progress to clients and plan resources.",
+          "acceptance_criteria": [
+            "Can view dashboard showing all uploaded drawings and their status",
+            "Can see progress (uploaded → processing → review → complete)",
+            "Can export status reports as PDF or CSV",
+            "Can track which drawings need validation"
+          ]
+        }
+      ]
+    }
+  ],
+  "features": {
+    "modules": [
+      {
+        "id": "upload",
+        "name": "P&ID Upload",
+        "description": "Upload PDF P&ID files for processing",
+        "priority": "must-have",
+        "requirements": [
+          {
+            "id": "UP-01",
+            "description": "Support PDF file upload (single and batch)",
+            "priority": "must-have"
+          },
+          {
+            "id": "UP-02",
+            "description": "Support vector PDF files",
+            "priority": "must-have"
+          },
+          {
+            "id": "UP-03",
+            "description": "Support scanned/raster PDF files",
+            "priority": "must-have"
+          },
+          {
+            "id": "UP-04",
+            "description": "Maximum file size: 50MB per file",
+            "priority": "must-have"
+          },
+          {
+            "id": "UP-05",
+            "description": "Drag-and-drop upload interface",
+            "priority": "must-have"
+          }
+        ]
+      },
+      {
+        "id": "symbol_detection",
+        "name": "AI Symbol Detection",
+        "description": "Detect and classify P&ID symbols using Custom CNN",
+        "priority": "must-have",
+        "requirements": [
+          {
+            "id": "SD-01",
+            "description": "Detect equipment symbols (vessels, pumps, tanks, heat exchangers)",
+            "priority": "must-have"
+          },
+          {
+            "id": "SD-02",
+            "description": "Detect instrument symbols (transmitters, controllers, indicators)",
+            "priority": "must-have"
+          },
+          {
+            "id": "SD-03",
+            "description": "Detect valve symbols (gate, globe, ball, check, control)",
+            "priority": "must-have"
+          },
+          {
+            "id": "SD-04",
+            "description": "Classify symbols according to ISO 10628 standard",
+            "priority": "must-have"
+          },
+          {
+            "id": "SD-05",
+            "description": "Output confidence score per detection",
+            "priority": "must-have"
+          }
+        ],
+        "performance_targets": {
+          "accuracy": ">90%",
+          "processing_time": "<60 seconds per P&ID"
+        }
+      },
+      {
+        "id": "ocr",
+        "name": "OCR Text Extraction",
+        "description": "Extract text from P&IDs using Tesseract OCR",
+        "priority": "must-have",
+        "requirements": [
+          {
+            "id": "OCR-01",
+            "description": "Extract equipment tags (e.g., P-101, V-201)",
+            "priority": "must-have"
+          },
+          {
+            "id": "OCR-02",
+            "description": "Extract instrument tags (e.g., FT-101, PIC-201)",
+            "priority": "must-have"
+          },
+          {
+            "id": "OCR-03",
+            "description": "Extract line numbers (e.g., 6\"-P-101-A1)",
+            "priority": "must-have"
+          },
+          {
+            "id": "OCR-04",
+            "description": "Handle rotated text (0°, 90°, 180°, 270°)",
+            "priority": "must-have"
+          }
+        ],
+        "performance_targets": {
+          "accuracy_vector": ">95%",
+          "accuracy_scanned": ">85%"
+        }
+      },
+      {
+        "id": "validation",
+        "name": "Validation Interface",
+        "description": "Human-in-the-loop validation and correction",
+        "priority": "must-have",
+        "requirements": [
+          {
+            "id": "VAL-01",
+            "description": "Side-by-side comparison (original vs extracted)",
+            "priority": "must-have"
+          },
+          {
+            "id": "VAL-02",
+            "description": "Synchronized zoom and pan",
+            "priority": "must-have"
+          },
+          {
+            "id": "VAL-03",
+            "description": "Human-in-the-loop editing (add, edit, delete)",
+            "priority": "must-have"
+          },
+          {
+            "id": "VAL-04",
+            "description": "Validation checklist",
+            "priority": "must-have"
+          },
+          {
+            "id": "VAL-05",
+            "description": "Undo/redo functionality",
+            "priority": "must-have"
+          }
+        ]
+      },
+      {
+        "id": "export_cad",
+        "name": "AutoCAD Export",
+        "description": "Export to intelligent AutoCAD drawings",
+        "priority": "must-have",
+        "requirements": [
+          {
+            "id": "EXP-01",
+            "description": "Export as DWG format (AutoCAD 2018+)",
+            "priority": "must-have"
+          },
+          {
+            "id": "EXP-02",
+            "description": "Export as DXF format",
+            "priority": "must-have"
+          },
+          {
+            "id": "EXP-03",
+            "description": "Proper layer organization",
+            "priority": "must-have"
+          },
+          {
+            "id": "EXP-04",
+            "description": "Symbol blocks with editable attributes",
+            "priority": "must-have"
+          }
+        ]
+      },
+      {
+        "id": "export_data",
+        "name": "Data List Exports",
+        "description": "Export structured engineering data",
+        "priority": "must-have",
+        "outputs": [
+          "Equipment List",
+          "Line List",
+          "Instrument List",
+          "Valve List",
+          "Material Take-Off (MTO)",
+          "Comparison Report"
+        ],
+        "formats": ["xlsx", "csv", "pdf"]
+      },
+      {
+        "id": "dashboard",
+        "name": "Project Dashboard",
+        "description": "Project management and tracking",
+        "priority": "must-have",
+        "requirements": [
+          {
+            "id": "DB-01",
+            "description": "Display project summary",
+            "priority": "must-have"
+          },
+          {
+            "id": "DB-02",
+            "description": "List drawings with status and actions",
+            "priority": "must-have"
+          },
+          {
+            "id": "DB-03",
+            "description": "Usage tracking (P&IDs vs plan limit)",
+            "priority": "must-have"
+          }
+        ]
+      },
+      {
+        "id": "auth",
+        "name": "Authentication",
+        "description": "SSO authentication and security",
+        "priority": "must-have",
+        "providers": ["Microsoft Azure AD", "Google Workspace"],
+        "requirements": [
+          {
+            "id": "AUTH-01",
+            "description": "SSO via Microsoft Azure AD",
+            "priority": "must-have"
+          },
+          {
+            "id": "AUTH-02",
+            "description": "SSO via Google Workspace",
+            "priority": "must-have"
+          },
+          {
+            "id": "AUTH-03",
+            "description": "Role-based access control",
+            "priority": "must-have"
+          }
+        ]
+      },
+      {
+        "id": "cloud_storage",
+        "name": "Cloud Storage Integration",
+        "description": "Import/export from cloud storage",
+        "priority": "must-have",
+        "providers": ["Microsoft OneDrive", "Microsoft SharePoint", "Google Drive"]
+      }
+    ]
+  },
+  "technical_architecture": {
+    "stack": {
+      "frontend": {
+        "framework": "React 18",
+        "language": "TypeScript 5",
+        "styling": "Tailwind CSS",
+        "components": "shadcn/ui",
+        "state": "Zustand",
+        "testing": "Vitest"
+      },
+      "backend": {
+        "framework": "FastAPI",
+        "language": "Python 3.11",
+        "orm": "SQLAlchemy",
+        "testing": "pytest"
+      },
+      "database": {
+        "primary": "PostgreSQL 15",
+        "cache": "Redis"
+      },
+      "ai_ml": {
+        "framework": "PyTorch 2.x",
+        "ocr": "Tesseract 5.x",
+        "model_architecture": "ResNet-50 + FPN"
+      },
+      "storage": {
+        "files": "AWS S3",
+        "region": "eu-west-1"
+      },
+      "auth": {
+        "provider": "Auth0",
+        "protocol": "OAuth 2.0 / OIDC"
+      },
+      "cad_export": {
+        "library": "ezdxf"
+      }
+    },
+    "infrastructure": {
+      "cloud_provider": "AWS or Azure",
+      "region": "EU (Ireland or Netherlands)",
+      "containerization": "Docker + Kubernetes",
+      "ci_cd": "GitHub Actions"
+    }
+  },
+  "data_models": {
+    "entities": [
+      {
+        "name": "Organization",
+        "fields": [
+          {"name": "id", "type": "UUID", "required": true},
+          {"name": "name", "type": "string", "required": true},
+          {"name": "slug", "type": "string", "required": true},
+          {"name": "subscription_tier", "type": "enum", "values": ["starter", "professional", "business"]},
+          {"name": "monthly_pid_limit", "type": "integer", "default": 20}
+        ]
+      },
+      {
+        "name": "User",
+        "fields": [
+          {"name": "id", "type": "UUID", "required": true},
+          {"name": "organization_id", "type": "UUID", "required": true},
+          {"name": "email", "type": "string", "required": true},
+          {"name": "name", "type": "string"},
+          {"name": "role", "type": "enum", "values": ["admin", "member", "viewer"]},
+          {"name": "sso_provider", "type": "enum", "values": ["microsoft", "google"]}
+        ]
+      },
+      {
+        "name": "Project",
+        "fields": [
+          {"name": "id", "type": "UUID", "required": true},
+          {"name": "organization_id", "type": "UUID", "required": true},
+          {"name": "name", "type": "string", "required": true},
+          {"name": "description", "type": "text"}
+        ]
+      },
+      {
+        "name": "Drawing",
+        "fields": [
+          {"name": "id", "type": "UUID", "required": true},
+          {"name": "project_id", "type": "UUID", "required": true},
+          {"name": "original_filename", "type": "string", "required": true},
+          {"name": "storage_path", "type": "string", "required": true},
+          {"name": "file_type", "type": "enum", "values": ["pdf_vector", "pdf_scanned"]},
+          {"name": "status", "type": "enum", "values": ["uploaded", "processing", "review", "complete", "error"]}
+        ]
+      },
+      {
+        "name": "Symbol",
+        "fields": [
+          {"name": "id", "type": "UUID", "required": true},
+          {"name": "drawing_id", "type": "UUID", "required": true},
+          {"name": "symbol_class", "type": "string", "required": true},
+          {"name": "category", "type": "enum", "values": ["equipment", "instrument", "valve", "other"]},
+          {"name": "tag_number", "type": "string"},
+          {"name": "bbox_x", "type": "float", "required": true},
+          {"name": "bbox_y", "type": "float", "required": true},
+          {"name": "bbox_width", "type": "float", "required": true},
+          {"name": "bbox_height", "type": "float", "required": true},
+          {"name": "confidence", "type": "float"},
+          {"name": "is_verified", "type": "boolean", "default": false}
+        ]
+      }
+    ]
+  },
+  "security": {
+    "authentication": {
+      "method": "SSO (OAuth 2.0 / OIDC)",
+      "providers": ["Microsoft Azure AD", "Google Workspace"],
+      "session": {
+        "type": "JWT",
+        "expiry_hours": 24
+      }
+    },
+    "encryption": {
+      "transit": "TLS 1.3",
+      "rest": "AES-256"
+    },
+    "compliance": {
+      "gdpr": true,
+      "data_residency": "EU"
+    },
+    "data_retention": {
+      "user_accounts": "Until deletion",
+      "drawings": "1 year after last access",
+      "audit_logs": "3 years"
+    }
+  },
+  "pricing": {
+    "model": "SaaS Subscription",
+    "currency": "EUR",
+    "tiers": [
+      {
+        "name": "Free Trial",
+        "price_monthly": 0,
+        "duration_days": 14,
+        "pids_included": 5,
+        "users": "unlimited",
+        "features": ["full_features"]
+      },
+      {
+        "name": "Starter",
+        "price_monthly": 99,
+        "pids_included": 20,
+        "users": 3,
+        "extra_pid_price": 8,
+        "features": ["cloud_storage", "sso"]
+      },
+      {
+        "name": "Professional",
+        "price_monthly": 199,
+        "pids_included": 35,
+        "users": 10,
+        "extra_pid_price": 6,
+        "features": ["cloud_storage", "sso", "priority_support", "custom_symbols"]
+      },
+      {
+        "name": "Business",
+        "price_monthly": 299,
+        "pids_included": 50,
+        "users": "unlimited",
+        "extra_pid_price": 5,
+        "features": ["cloud_storage", "sso", "priority_support", "custom_symbols", "api_access", "dedicated_account_manager"]
+      }
+    ]
+  },
+  "development_phases": [
+    {
+      "phase": 1,
+      "name": "Foundation",
+      "duration_weeks": 2,
+      "focus": ["Project setup", "Database schema", "Authentication"]
+    },
+    {
+      "phase": 2,
+      "name": "Core Backend",
+      "duration_weeks": 2,
+      "focus": ["File upload", "PDF processing pipeline"]
+    },
+    {
+      "phase": 3,
+      "name": "AI/ML Pipeline",
+      "duration_weeks": 4,
+      "focus": ["Training data", "Symbol detection CNN", "OCR pipeline", "Integration"]
+    },
+    {
+      "phase": 4,
+      "name": "Frontend MVP",
+      "duration_weeks": 3,
+      "focus": ["Core UI", "Validation interface", "Project management"]
+    },
+    {
+      "phase": 5,
+      "name": "Export",
+      "duration_weeks": 2,
+      "focus": ["AutoCAD export", "Data list exports"]
+    },
+    {
+      "phase": 6,
+      "name": "Integrations",
+      "duration_weeks": 1,
+      "focus": ["Cloud storage integration"]
+    },
+    {
+      "phase": 7,
+      "name": "Testing & Launch",
+      "duration_weeks": 2,
+      "focus": ["E2E testing", "Security audit", "Deployment", "Beta testing"]
+    }
+  ],
+  "success_metrics": {
+    "product": {
+      "symbol_detection_accuracy": {"target": ">90%", "timeline": "6 months"},
+      "ocr_accuracy_vector": {"target": ">95%", "timeline": "6 months"},
+      "ocr_accuracy_scanned": {"target": ">85%", "timeline": "6 months"},
+      "processing_time": {"target": "<15 min/P&ID", "timeline": "6 months"}
+    },
+    "business": {
+      "paying_customers": {"target": 30, "timeline": "12 months"},
+      "mrr": {"target": "€6,000", "timeline": "12 months"},
+      "churn_rate": {"target": "<3%", "timeline": "12 months"},
+      "nps": {"target": ">50", "timeline": "12 months"}
+    }
+  },
+  "risks": [
+    {
+      "risk": "AI accuracy below target",
+      "probability": "medium",
+      "impact": "high",
+      "mitigation": "Extensive testing, human-in-loop validation, phased rollout"
+    },
+    {
+      "risk": "Slow customer adoption",
+      "probability": "medium",
+      "impact": "high",
+      "mitigation": "Free trial, case studies, partner with industry associations"
+    },
+    {
+      "risk": "Competition from IPS/others",
+      "probability": "medium",
+      "impact": "medium",
+      "mitigation": "Focus on mid-market, competitive pricing, superior UX"
+    },
+    {
+      "risk": "GDPR compliance issues",
+      "probability": "low",
+      "impact": "high",
+      "mitigation": "Legal review, EU data centers, DPA templates"
+    }
+  ],
+  "standards": {
+    "pid_standard": "ISO 10628",
+    "symbol_classes": 50,
+    "custom_symbols": "Hybrid (admin request)"
+  }
+}

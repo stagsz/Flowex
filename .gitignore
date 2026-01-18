@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Build outputs
+dist/
+build/
+*.egg
+*.whl
+.next/
+out/
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+.coverage
+htmlcov/
+.pytest_cache/
+.nyc_output/
+
+# Logs
+*.log
+ralph_log_*.txt
+npm-debug.log*
+
+# ML/AI
+*.pt
+*.pth
+*.onnx
+*.pkl
+ml/data/
+ml/models/*.pt
+ml/models/*.pth
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# Uploads (local dev)
+uploads/
