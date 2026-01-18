@@ -35,11 +35,23 @@
 - [x] Set up Alembic migrations
 - [x] Create initial migration
 
+### Phase 1.3 Authentication (SSO)
+- [x] Implement Auth0 JWKS client for token verification
+- [x] Implement JWT token validation
+- [x] Create authentication dependencies (get_current_user)
+- [x] Implement OAuth login flow (/auth/login)
+- [x] Implement OAuth callback handler (/auth/callback)
+- [x] Implement logout endpoint (/auth/logout)
+- [x] Implement user info endpoint (/auth/me)
+- [x] Implement role-based access control (RoleChecker)
+- [x] Implement organization access control
+- [x] Write authentication tests
+
 ---
 
 ## In Progress
 
-### Phase 1.3 Authentication (SSO)
+### Phase 2.1 File Upload Service
 
 ---
 

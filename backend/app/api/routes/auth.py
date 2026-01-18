@@ -1,0 +1,161 @@
+from typing import Annotated
+from urllib.parse import urlencode
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.core.deps import get_current_user, get_db
+from app.models import Organization, SSOProvider, User
+
+router = APIRouter(prefix="/auth", tags=["authentication"])
+
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    name: str | None
+    role: str
+    organization_id: str
+    organization_name: str
+
+    class Config:
+        from_attributes = True
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+
+@router.get("/login")
+async def login(
+    provider: str = Query(..., description="SSO provider: 'microsoft' or 'google'"),
+    redirect_uri: str = Query(..., description="URI to redirect after login"),
+) -> RedirectResponse:
+    """Initiate SSO login flow."""
+    if provider not in ["microsoft", "google"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid provider. Use 'microsoft' or 'google'",
+        )
+
+    # Build Auth0 authorization URL
+    params = {
+        "client_id": settings.AUTH0_CLIENT_ID,
+        "response_type": "code",
+        "redirect_uri": redirect_uri,
+        "scope": "openid profile email",
+        "connection": "google-oauth2" if provider == "google" else "windowslive",
+    }
+    auth_url = f"https://{settings.AUTH0_DOMAIN}/authorize?{urlencode(params)}"
+    return RedirectResponse(url=auth_url)
+
+
+@router.get("/callback")
+async def callback(
+    code: str = Query(..., description="Authorization code from Auth0"),
+    redirect_uri: str = Query(..., description="Original redirect URI"),
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    """Handle OAuth callback and exchange code for tokens."""
+    # Exchange code for tokens
+    token_url = f"https://{settings.AUTH0_DOMAIN}/oauth/token"
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            token_url,
+            json={
+                "grant_type": "authorization_code",
+                "client_id": settings.AUTH0_CLIENT_ID,
+                "client_secret": settings.AUTH0_CLIENT_SECRET,
+                "code": code,
+                "redirect_uri": redirect_uri,
+            },
+        )
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Failed to exchange authorization code",
+            )
+        tokens = response.json()
+
+    # Get user info from Auth0
+    userinfo_url = f"https://{settings.AUTH0_DOMAIN}/userinfo"
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            userinfo_url,
+            headers={"Authorization": f"Bearer {tokens['access_token']}"},
+        )
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Failed to get user info",
+            )
+        userinfo = response.json()
+
+    # Find or create user
+    email = userinfo.get("email")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email not provided by SSO provider",
+        )
+
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        # Create organization and user for new users
+        org_name = email.split("@")[1].split(".")[0].title()
+        org_slug = email.split("@")[1].replace(".", "-").lower()
+
+        # Check if org exists
+        org = db.query(Organization).filter(Organization.slug == org_slug).first()
+        if not org:
+            org = Organization(name=org_name, slug=org_slug)
+            db.add(org)
+            db.flush()
+
+        # Determine SSO provider
+        sub = userinfo.get("sub", "")
+        sso_provider = SSOProvider.GOOGLE if "google" in sub else SSOProvider.MICROSOFT
+
+        user = User(
+            email=email,
+            name=userinfo.get("name"),
+            organization_id=org.id,
+            sso_provider=sso_provider,
+            sso_subject_id=sub,
+        )
+        db.add(user)
+        db.commit()
+
+    return TokenResponse(
+        access_token=tokens["access_token"],
+        expires_in=tokens.get("expires_in", 86400),
+    )
+
+
+@router.post("/logout")
+async def logout() -> dict[str, str]:
+    """Logout the current user."""
+    # For JWT-based auth, logout is handled client-side by deleting the token
+    # Optionally, we could implement token blacklisting here
+    return {"message": "Logged out successfully"}
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_current_user_info(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> UserResponse:
+    """Get the current authenticated user's information."""
+    return UserResponse(
+        id=str(current_user.id),
+        email=current_user.email,
+        name=current_user.name,
+        role=current_user.role.value,
+        organization_id=str(current_user.organization_id),
+        organization_name=current_user.organization.name,
+    )
