@@ -1,0 +1,23 @@
+# PyTorch (CPU version - use pytorch.org for GPU)
+torch==2.2.0
+torchvision==0.17.0
+
+# ML utilities
+numpy==1.26.4
+pillow==10.2.0
+opencv-python==4.9.0.80
+scikit-learn==1.4.0
+
+# OCR
+pytesseract==0.3.10
+
+# Model export
+onnx==1.15.0
+onnxruntime==1.17.0
+
+# Data handling
+pandas==2.2.0
+pycocotools==2.0.7
+
+# Visualization
+matplotlib==3.8.2
