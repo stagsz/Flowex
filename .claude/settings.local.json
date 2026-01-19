@@ -13,7 +13,11 @@
       "WebFetch(domain:supabase.com)",
       "Bash(nslookup:*)",
       "Bash(curl:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm test:*)",
+      "Bash(npm run lint)"
     ]
   }
 }

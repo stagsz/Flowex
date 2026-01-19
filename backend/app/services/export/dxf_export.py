@@ -7,13 +7,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import ezdxf
 from ezdxf import units
 from ezdxf.document import Drawing as DXFDocument
 from ezdxf.enums import TextEntityAlignment
-from ezdxf.layouts import Modelspace
+from ezdxf.layouts import Modelspace  # type: ignore[attr-defined]
 
 from app.services.export.symbol_blocks import ISO10628BlockLibrary
 
@@ -118,7 +118,7 @@ class LayerConfig:
 class DXFExportService:
     """Service for exporting P&ID drawings to DXF format."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.doc: DXFDocument | None = None
         self.msp: Modelspace | None = None
         self.block_library: ISO10628BlockLibrary | None = None
@@ -194,7 +194,7 @@ class DXFExportService:
 
     def _initialize_document(self, options: ExportOptions) -> None:
         """Initialize a new DXF document."""
-        self.doc = ezdxf.new("R2018")  # AutoCAD 2018 format
+        self.doc = ezdxf.new("R2018")  # type: ignore[attr-defined]  # AutoCAD 2018 format
         self.doc.units = units.MM
         self.msp = self.doc.modelspace()
 
@@ -207,6 +207,7 @@ class DXFExportService:
 
     def _setup_linetypes(self) -> None:
         """Set up custom line types."""
+        assert self.doc is not None  # Set by _initialize_document
         # DASHED2 for instrument lines (shorter dashes)
         if "DASHED2" not in self.doc.linetypes:
             self.doc.linetypes.add(
@@ -217,14 +218,15 @@ class DXFExportService:
 
     def _create_layers(self) -> None:
         """Create all required layers."""
+        assert self.doc is not None  # Set by _initialize_document
         for name, color, linetype, _description in LayerConfig.LAYERS:
             try:
                 self.doc.layers.add(name, color=color, linetype=linetype)
-            except ezdxf.DXFTableEntryError:
+            except ezdxf.DXFTableEntryError:  # type: ignore[attr-defined]
                 # Layer already exists
                 layer = self.doc.layers.get(name)
                 layer.color = color
-                layer.linetype = linetype
+                layer.linetype = linetype  # type: ignore[union-attr]
 
     def _place_symbols(self, symbols: list["Symbol"], options: ExportOptions) -> None:
         """Place symbol blocks in the drawing."""

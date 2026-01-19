@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import {
   Card,
@@ -18,6 +18,7 @@ import {
   Eye,
   Download,
   MoreVertical,
+  Loader2,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -44,57 +45,55 @@ export function DrawingsPage() {
   const [statusFilter, setStatusFilter] = useState(
     searchParams.get("status") || "all"
   )
+  const [drawings, setDrawings] = useState<Drawing[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // Mock data - would come from API
-  const drawings: Drawing[] = [
-    {
-      id: "1",
-      name: "P&ID-001-Rev3.pdf",
-      projectName: "Refinery Unit A",
-      status: "completed",
-      progress: 100,
-      symbolsDetected: 156,
-      createdAt: "2026-01-19",
-      processedAt: "2026-01-19",
-    },
-    {
-      id: "2",
-      name: "P&ID-002-Rev1.pdf",
-      projectName: "Refinery Unit A",
-      status: "processing",
-      progress: 65,
-      symbolsDetected: 0,
-      createdAt: "2026-01-19",
-    },
-    {
-      id: "3",
-      name: "PFD-Main-Process.pdf",
-      projectName: "Chemical Plant B",
-      status: "completed",
-      progress: 100,
-      symbolsDetected: 89,
-      createdAt: "2026-01-18",
-      processedAt: "2026-01-18",
-    },
-    {
-      id: "4",
-      name: "P&ID-Utilities.pdf",
-      projectName: "Chemical Plant B",
-      status: "failed",
-      progress: 0,
-      symbolsDetected: 0,
-      createdAt: "2026-01-17",
-    },
-    {
-      id: "5",
-      name: "P&ID-003-Rev2.pdf",
-      projectName: "Refinery Unit A",
-      status: "pending",
-      progress: 0,
-      symbolsDetected: 0,
-      createdAt: "2026-01-19",
-    },
-  ]
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+  // Fetch drawings from API
+  useEffect(() => {
+    async function fetchDrawings() {
+      try {
+        // First fetch all projects, then get drawings for each
+        const projectsResponse = await fetch(`${apiUrl}/api/projects`)
+        if (projectsResponse.ok) {
+          const projects = await projectsResponse.json()
+          const allDrawings: Drawing[] = []
+
+          for (const project of projects) {
+            const drawingsResponse = await fetch(`${apiUrl}/api/drawings/project/${project.id}`)
+            if (drawingsResponse.ok) {
+              const projectDrawings = await drawingsResponse.json()
+              for (const d of projectDrawings) {
+                allDrawings.push({
+                  id: d.id,
+                  name: d.original_filename,
+                  projectName: project.name,
+                  status: d.status as Drawing["status"],
+                  progress: d.status === "completed" ? 100 : d.status === "processing" ? 50 : 0,
+                  symbolsDetected: 0, // Would come from symbols API
+                  createdAt: new Date(d.created_at).toLocaleDateString(),
+                  processedAt: d.processing_completed_at
+                    ? new Date(d.processing_completed_at).toLocaleDateString()
+                    : undefined,
+                })
+              }
+            }
+          }
+          setDrawings(allDrawings)
+        } else {
+          // Fallback to empty if API unavailable
+          setDrawings([])
+        }
+      } catch {
+        // API error - show empty state
+        setDrawings([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchDrawings()
+  }, [apiUrl])
 
   const statusConfig = {
     pending: {
@@ -174,7 +173,14 @@ export function DrawingsPage() {
         </div>
       </div>
 
-      {filteredDrawings.length === 0 ? (
+      {loading ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="h-12 w-12 text-muted-foreground mb-4 animate-spin" />
+            <h3 className="text-lg font-semibold">Loading drawings...</h3>
+          </CardContent>
+        </Card>
+      ) : filteredDrawings.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <FileImage className="h-12 w-12 text-muted-foreground mb-4" />
