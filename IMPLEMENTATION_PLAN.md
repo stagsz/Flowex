@@ -220,7 +220,7 @@ _None_
 ## Backlog (Prioritized)
 
 #### 8.2 Deployment
-- [ ] Set up CI/CD pipeline
+- [x] Set up CI/CD pipeline - `8dcd214`
 - [ ] Configure production environment (AWS/Azure)
 - [ ] Set up monitoring (Sentry, logs)
 - [ ] Deploy to staging
