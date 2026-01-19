@@ -14,6 +14,19 @@ from app.models import Organization, SSOProvider, User
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
+def _is_valid_redirect_uri(redirect_uri: str) -> bool:
+    """Validate redirect URI against allowed origins to prevent open redirect attacks."""
+    # Allow configured CORS origins
+    allowed_origins = settings.CORS_ORIGINS
+
+    # Check if redirect_uri starts with any allowed origin
+    for origin in allowed_origins:
+        if redirect_uri.startswith(origin):
+            return True
+
+    return False
+
+
 class UserResponse(BaseModel):
     id: str
     email: str
@@ -49,6 +62,13 @@ async def login(
             detail="Invalid provider. Use 'microsoft' or 'google'",
         )
 
+    # Validate redirect URI to prevent open redirect attacks
+    if not _is_valid_redirect_uri(redirect_uri):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid redirect URI. Must match allowed origins.",
+        )
+
     # Build Auth0 authorization URL
     params = {
         "client_id": settings.AUTH0_CLIENT_ID,
@@ -68,6 +88,13 @@ async def callback(
     db: Session = Depends(get_db),
 ) -> TokenResponse:
     """Handle OAuth callback and exchange code for tokens."""
+    # Validate redirect URI to prevent token theft via open redirect
+    if not _is_valid_redirect_uri(redirect_uri):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid redirect URI. Must match allowed origins.",
+        )
+
     # Exchange code for tokens
     token_url = f"https://{settings.AUTH0_DOMAIN}/oauth/token"
     async with httpx.AsyncClient() as client:

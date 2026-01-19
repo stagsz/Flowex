@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -38,7 +38,7 @@ class Auth0JWKSClient:
 
     async def _get_jwks(self) -> dict[str, Any]:
         """Fetch JWKS from Auth0, with caching."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if (
             self._jwks is not None
             and self._jwks_fetched_at is not None
@@ -92,8 +92,8 @@ async def verify_token(token: str) -> TokenPayload:
 
         return TokenPayload(
             sub=payload["sub"],
-            exp=datetime.fromtimestamp(payload["exp"], tz=timezone.utc),
-            iat=datetime.fromtimestamp(payload["iat"], tz=timezone.utc),
+            exp=datetime.fromtimestamp(payload["exp"], tz=UTC),
+            iat=datetime.fromtimestamp(payload["iat"], tz=UTC),
             email=payload.get("email"),
             name=payload.get("name"),
             org_id=payload.get("org_id"),
@@ -107,7 +107,9 @@ async def verify_token(token: str) -> TokenPayload:
 def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
     """Create a JWT access token (for internal use/testing)."""
     to_encode = data.copy()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + (expires_delta or timedelta(hours=settings.ACCESS_TOKEN_EXPIRE_HOURS))
     to_encode.update({"exp": expire, "iat": now})
+    # Use HS256 for internal tokens (JWT_SECRET_KEY is symmetric)
+    # Note: Auth0 tokens use RS256 with JWKS verification
     return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm="HS256")
