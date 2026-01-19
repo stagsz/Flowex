@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Card,
@@ -26,6 +26,12 @@ interface UploadFile {
   progress: number
   status: "pending" | "uploading" | "completed" | "failed"
   error?: string
+  drawingId?: string
+}
+
+interface Project {
+  id: string
+  name: string
 }
 
 export function UploadPage() {
@@ -33,13 +39,40 @@ export function UploadPage() {
   const [files, setFiles] = useState<UploadFile[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
   const [selectedProject, setSelectedProject] = useState("")
+  const [projects, setProjects] = useState<Project[]>([])
+  const [loadingProjects, setLoadingProjects] = useState(true)
 
-  // Mock projects - would come from API
-  const projects = [
-    { id: "1", name: "Refinery Unit A" },
-    { id: "2", name: "Chemical Plant B" },
-    { id: "3", name: "Power Station C" },
-  ]
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+  // Fetch projects from API
+  useEffect(() => {
+    async function fetchProjects() {
+      try {
+        const response = await fetch(`${apiUrl}/api/projects`)
+        if (response.ok) {
+          const data = await response.json()
+          setProjects(data.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name })))
+        } else {
+          // Fallback to mock data if API unavailable
+          setProjects([
+            { id: "1", name: "Refinery Unit A" },
+            { id: "2", name: "Chemical Plant B" },
+            { id: "3", name: "Power Station C" },
+          ])
+        }
+      } catch {
+        // Fallback to mock data
+        setProjects([
+          { id: "1", name: "Refinery Unit A" },
+          { id: "2", name: "Chemical Plant B" },
+          { id: "3", name: "Power Station C" },
+        ])
+      } finally {
+        setLoadingProjects(false)
+      }
+    }
+    fetchProjects()
+  }, [apiUrl])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -99,31 +132,58 @@ export function UploadPage() {
 
       setFiles((prev) =>
         prev.map((f) =>
-          f.id === uploadFile.id ? { ...f, status: "uploading" } : f
+          f.id === uploadFile.id ? { ...f, status: "uploading", progress: 10 } : f
         )
       )
 
-      // Simulate upload progress
-      for (let progress = 0; progress <= 100; progress += 10) {
-        await new Promise((resolve) => setTimeout(resolve, 100))
+      try {
+        // Create FormData for file upload
+        const formData = new FormData()
+        formData.append("file", uploadFile.file)
+
+        // Upload to backend API
+        const response = await fetch(
+          `${apiUrl}/api/drawings/upload/${selectedProject}`,
+          {
+            method: "POST",
+            body: formData,
+          }
+        )
+
         setFiles((prev) =>
-          prev.map((f) => (f.id === uploadFile.id ? { ...f, progress } : f))
+          prev.map((f) =>
+            f.id === uploadFile.id ? { ...f, progress: 90 } : f
+          )
+        )
+
+        if (response.ok) {
+          const data = await response.json()
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === uploadFile.id
+                ? { ...f, status: "completed", progress: 100, drawingId: data.id }
+                : f
+            )
+          )
+        } else {
+          const errorData = await response.json().catch(() => ({ detail: "Upload failed" }))
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === uploadFile.id
+                ? { ...f, status: "failed", error: errorData.detail || "Upload failed" }
+                : f
+            )
+          )
+        }
+      } catch (error) {
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.id === uploadFile.id
+              ? { ...f, status: "failed", error: "Network error - is the backend running?" }
+              : f
+          )
         )
       }
-
-      // Mark as completed (or failed randomly for demo)
-      const succeeded = Math.random() > 0.1
-      setFiles((prev) =>
-        prev.map((f) =>
-          f.id === uploadFile.id
-            ? {
-                ...f,
-                status: succeeded ? "completed" : "failed",
-                error: succeeded ? undefined : "Upload failed",
-              }
-            : f
-        )
-      )
     }
   }
 
