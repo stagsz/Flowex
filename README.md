@@ -46,7 +46,7 @@ Flowex uses computer vision and OCR to automatically detect symbols, extract tex
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-org/flowex.git
+git clone https://github.com/stagsz/Flowex.git
 cd flowex
 ```
 
