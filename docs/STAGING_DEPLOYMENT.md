@@ -139,22 +139,14 @@ Record:
 2. Create environment: `staging`
 3. Optionally add deployment protection rules
 
-### 3.2 Configure GitHub Secrets
-
-Go to: `Repository → Settings → Secrets and variables → Actions → Repository secrets`
-
-Add secret:
-| Secret Name | Value |
-|------------|-------|
-| `AWS_ACCOUNT_ID` | Your 12-digit AWS account ID |
-
-### 3.3 Configure GitHub Environment Variables
+### 3.2 Configure GitHub Environment Variables
 
 Go to: `Repository → Settings → Environments → staging → Environment variables`
 
 Add variables:
 | Variable Name | Value | Source |
 |--------------|-------|--------|
+| `AWS_ACCOUNT_ID` | Your 12-digit AWS account ID | AWS Console |
 | `AUTH0_DOMAIN` | `your-tenant.auth0.com` | Auth0 |
 | `AUTH0_CLIENT_ID` | Auth0 client ID | Auth0 |
 | `FRONTEND_BUCKET` | S3 bucket name | Terraform output |
