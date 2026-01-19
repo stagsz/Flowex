@@ -1,0 +1,39 @@
+{
+  "family": "flowex-migration",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "${EXECUTION_ROLE_ARN}",
+  "taskRoleArn": "${TASK_ROLE_ARN}",
+  "containerDefinitions": [
+    {
+      "name": "migration",
+      "image": "${ECR_REPOSITORY_URL}:${IMAGE_TAG}",
+      "essential": true,
+      "command": [
+        "alembic",
+        "upgrade",
+        "head"
+      ],
+      "environment": [
+        { "name": "ENVIRONMENT", "value": "${ENVIRONMENT}" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL", "valueFrom": "${SECRETS_ARN}:DATABASE_URL::" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/flowex-${ENVIRONMENT}/backend",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "migration"
+        }
+      }
+    }
+  ],
+  "tags": [
+    { "key": "Project", "value": "Flowex" },
+    { "key": "Environment", "value": "${ENVIRONMENT}" }
+  ]
+}

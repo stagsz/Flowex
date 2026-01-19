@@ -1,0 +1,79 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Documentation
+*.md
+docs/
+
+# Local development files
+*.local
+*.log
+
+# Test data
+tests/
+test_*.py
+
+# Alembic versions (keep in prod, but exclude during dev builds)
+# alembic/versions/
+
+# ML model weights (handled separately)
+*.pt
+*.pth
+*.onnx
+
+# Uploads directory (runtime only)
+uploads/
+exports/

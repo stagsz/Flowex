@@ -1,0 +1,48 @@
+{
+  "family": "flowex-celery-worker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "2048",
+  "executionRoleArn": "${EXECUTION_ROLE_ARN}",
+  "taskRoleArn": "${TASK_ROLE_ARN}",
+  "containerDefinitions": [
+    {
+      "name": "celery-worker",
+      "image": "${ECR_REPOSITORY_URL}:${IMAGE_TAG}",
+      "essential": true,
+      "command": [
+        "celery",
+        "-A",
+        "app.core.celery_app",
+        "worker",
+        "--loglevel=info",
+        "--concurrency=2"
+      ],
+      "environment": [
+        { "name": "ENVIRONMENT", "value": "${ENVIRONMENT}" },
+        { "name": "STORAGE_PROVIDER", "value": "aws" },
+        { "name": "AWS_REGION", "value": "${AWS_REGION}" },
+        { "name": "AWS_S3_BUCKET", "value": "${S3_BUCKET}" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL", "valueFrom": "${SECRETS_ARN}:DATABASE_URL::" },
+        { "name": "REDIS_URL", "valueFrom": "${SECRETS_ARN}:REDIS_URL::" },
+        { "name": "JWT_SECRET_KEY", "valueFrom": "${SECRETS_ARN}:JWT_SECRET_KEY::" },
+        { "name": "TOKEN_ENCRYPTION_KEY", "valueFrom": "${SECRETS_ARN}:TOKEN_ENCRYPTION_KEY::" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/flowex-${ENVIRONMENT}/celery",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "celery"
+        }
+      }
+    }
+  ],
+  "tags": [
+    { "key": "Project", "value": "Flowex" },
+    { "key": "Environment", "value": "${ENVIRONMENT}" }
+  ]
+}

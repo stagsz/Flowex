@@ -1,6 +1,8 @@
+import json
 import os
 from enum import Enum
-from typing import Self
+from functools import lru_cache
+from typing import Any, Self
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
@@ -12,6 +14,48 @@ class StorageProvider(str, Enum):
     AWS = "aws"
     SUPABASE = "supabase"
     LOCAL = "local"  # For testing
+
+
+def get_secrets_from_aws(secret_name: str, region: str = "eu-west-1") -> dict[str, Any]:
+    """Fetch secrets from AWS Secrets Manager.
+
+    Args:
+        secret_name: The name/ARN of the secret in Secrets Manager.
+        region: AWS region where the secret is stored.
+
+    Returns:
+        Dictionary of secret key-value pairs.
+    """
+    try:
+        import boto3
+        from botocore.exceptions import ClientError
+
+        client = boto3.client("secretsmanager", region_name=region)
+        response = client.get_secret_value(SecretId=secret_name)
+
+        if "SecretString" in response:
+            return json.loads(response["SecretString"])
+        return {}
+    except ImportError:
+        # boto3 not installed (likely dev environment)
+        return {}
+    except ClientError:
+        # Secret not found or access denied
+        return {}
+
+
+@lru_cache
+def load_aws_secrets() -> dict[str, Any]:
+    """Load secrets from AWS Secrets Manager if configured.
+
+    Uses caching to avoid repeated API calls.
+    """
+    secret_name = os.environ.get("AWS_SECRETS_NAME")
+    region = os.environ.get("AWS_REGION", "eu-west-1")
+
+    if secret_name:
+        return get_secrets_from_aws(secret_name, region)
+    return {}
 
 
 class Settings(BaseSettings):
@@ -124,6 +168,68 @@ class Settings(BaseSettings):
                 )
 
         return self
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_secrets_from_aws(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Load secrets from AWS Secrets Manager before validation.
+
+        This allows ECS tasks to inject secrets via the Secrets Manager
+        integration, which sets them as environment variables.
+        """
+        # Try to load from AWS Secrets Manager
+        aws_secrets = load_aws_secrets()
+        if aws_secrets:
+            # Merge AWS secrets with provided data (env vars take precedence)
+            for key, value in aws_secrets.items():
+                if key not in data or not data[key]:
+                    data[key] = value
+        return data
+
+    def check_health(self) -> dict[str, Any]:
+        """Check health of all dependencies.
+
+        Returns:
+            Dictionary with health status of each dependency.
+        """
+        health = {
+            "status": "healthy",
+            "checks": {}
+        }
+
+        # Check database connection
+        try:
+            from sqlalchemy import create_engine, text
+            engine = create_engine(self.DATABASE_URL)
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            health["checks"]["database"] = {"status": "healthy"}
+        except Exception as e:
+            health["checks"]["database"] = {"status": "unhealthy", "error": str(e)}
+            health["status"] = "degraded"
+
+        # Check Redis connection
+        try:
+            import redis
+            r = redis.from_url(self.REDIS_URL)
+            r.ping()
+            health["checks"]["redis"] = {"status": "healthy"}
+        except Exception as e:
+            health["checks"]["redis"] = {"status": "unhealthy", "error": str(e)}
+            health["status"] = "degraded"
+
+        # Check S3 access (if AWS provider)
+        if self.is_aws:
+            try:
+                import boto3
+                s3 = boto3.client("s3", region_name=self.AWS_REGION)
+                s3.head_bucket(Bucket=self.AWS_S3_BUCKET)
+                health["checks"]["s3"] = {"status": "healthy"}
+            except Exception as e:
+                health["checks"]["s3"] = {"status": "unhealthy", "error": str(e)}
+                health["status"] = "degraded"
+
+        return health
 
     class Config:
         env_file = ".env"

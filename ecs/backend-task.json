@@ -1,0 +1,62 @@
+{
+  "family": "flowex-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "${EXECUTION_ROLE_ARN}",
+  "taskRoleArn": "${TASK_ROLE_ARN}",
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "${ECR_REPOSITORY_URL}:${IMAGE_TAG}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "ENVIRONMENT", "value": "${ENVIRONMENT}" },
+        { "name": "STORAGE_PROVIDER", "value": "aws" },
+        { "name": "AWS_REGION", "value": "${AWS_REGION}" },
+        { "name": "AWS_S3_BUCKET", "value": "${S3_BUCKET}" },
+        { "name": "CORS_ORIGINS", "value": "${CORS_ORIGINS}" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL", "valueFrom": "${SECRETS_ARN}:DATABASE_URL::" },
+        { "name": "REDIS_URL", "valueFrom": "${SECRETS_ARN}:REDIS_URL::" },
+        { "name": "JWT_SECRET_KEY", "valueFrom": "${SECRETS_ARN}:JWT_SECRET_KEY::" },
+        { "name": "AUTH0_DOMAIN", "valueFrom": "${SECRETS_ARN}:AUTH0_DOMAIN::" },
+        { "name": "AUTH0_CLIENT_ID", "valueFrom": "${SECRETS_ARN}:AUTH0_CLIENT_ID::" },
+        { "name": "AUTH0_CLIENT_SECRET", "valueFrom": "${SECRETS_ARN}:AUTH0_CLIENT_SECRET::" },
+        { "name": "TOKEN_ENCRYPTION_KEY", "valueFrom": "${SECRETS_ARN}:TOKEN_ENCRYPTION_KEY::" },
+        { "name": "MICROSOFT_CLIENT_ID", "valueFrom": "${SECRETS_ARN}:MICROSOFT_CLIENT_ID::" },
+        { "name": "MICROSOFT_CLIENT_SECRET", "valueFrom": "${SECRETS_ARN}:MICROSOFT_CLIENT_SECRET::" },
+        { "name": "GOOGLE_CLIENT_ID", "valueFrom": "${SECRETS_ARN}:GOOGLE_CLIENT_ID::" },
+        { "name": "GOOGLE_CLIENT_SECRET", "valueFrom": "${SECRETS_ARN}:GOOGLE_CLIENT_SECRET::" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/flowex-${ENVIRONMENT}/backend",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "backend"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ],
+  "tags": [
+    { "key": "Project", "value": "Flowex" },
+    { "key": "Environment", "value": "${ENVIRONMENT}" }
+  ]
+}
