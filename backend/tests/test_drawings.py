@@ -1,8 +1,6 @@
 import pytest
 
 from app.services.drawings import (
-    ALLOWED_CONTENT_TYPES,
-    ALLOWED_EXTENSIONS,
     MAX_FILE_SIZE,
     FileValidationError,
     validate_file,

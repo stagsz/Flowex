@@ -1,6 +1,6 @@
 """Tests for cloud storage integration."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -9,10 +9,8 @@ from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models.cloud_connection import CloudProvider
 from app.services.cloud.base import BrowseResult, CloudFile, CloudFolder, OAuthTokens, UserInfo
 from app.services.cloud.encryption import TokenEncryption
-
 
 client = TestClient(app)
 
@@ -311,7 +309,7 @@ class TestDataClasses:
             path="/docs/test.pdf",
             size=1024,
             mime_type="application/pdf",
-            modified_at=datetime.now(timezone.utc),
+            modified_at=datetime.now(UTC),
         )
 
         assert file.id == "file_123"
@@ -340,7 +338,7 @@ class TestDataClasses:
             path="/test.pdf",
             size=1024,
             mime_type="application/pdf",
-            modified_at=datetime.now(timezone.utc),
+            modified_at=datetime.now(UTC),
         )
 
         result = BrowseResult(

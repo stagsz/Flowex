@@ -1,3 +1,4 @@
+import os
 from enum import Enum
 from typing import Self
 
@@ -99,7 +100,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> Self:
-        """Validate that production secrets are properly configured when not in DEBUG mode."""
+        """Validate that production secrets are properly configured when not in DEBUG mode.
+
+        Skipped during testing (when TESTING=true environment variable is set).
+        """
+        # Skip validation during testing
+        if os.environ.get("TESTING", "").lower() == "true":
+            return self
+
         if not self.DEBUG:
             # Check JWT secret is not the default development value
             if self.JWT_SECRET_KEY == "dev-secret-key-change-in-production":

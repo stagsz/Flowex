@@ -1,6 +1,5 @@
 import io
 
-import pytest
 from PIL import Image
 
 from app.services.pdf_processing import (
@@ -69,7 +68,6 @@ class TestImageTiling:
 
         # Second tile should start before first tile ends (overlap)
         if len(row_tiles) >= 2:
-            first_tile_end = row_tiles[0]["x"] + row_tiles[0]["width"]
             second_tile_start = row_tiles[1]["x"]
             # The overlap should be tile_size - step, where step = tile_size - overlap
             expected_start = tile_size - overlap

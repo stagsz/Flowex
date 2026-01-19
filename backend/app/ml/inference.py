@@ -165,8 +165,8 @@ class InferenceService:
             return []
 
         try:
-            # Convert to tensor
-            import torchvision.transforms.functional as F
+            # Convert to tensor (F is standard PyTorch convention for functional transforms)
+            import torchvision.transforms.functional as F  # noqa: N812
             image_tensor = F.to_tensor(image).to(self.device)
 
             # Run inference

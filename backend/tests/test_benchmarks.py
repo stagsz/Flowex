@@ -243,7 +243,7 @@ class TestDatabaseQueryBenchmarks:
 
             return db_session.query(Drawing).limit(100).all()
 
-        result = benchmark(query_drawings)
+        benchmark(query_drawings)
         # No assertion - just measuring query time
 
     @pytest.mark.skip(reason="Requires database connection")
@@ -258,7 +258,7 @@ class TestDatabaseQueryBenchmarks:
 
             return db_session.query(Symbol).filter(Symbol.drawing_id == drawing_id).all()
 
-        result = benchmark(query_symbols)
+        benchmark(query_symbols)
 
 
 # Performance assertions

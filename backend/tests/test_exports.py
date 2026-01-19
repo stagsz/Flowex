@@ -1,7 +1,5 @@
 """Tests for export functionality."""
 
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -24,7 +22,6 @@ from app.services.export.dxf_export import (
     TitleBlockInfo,
 )
 from app.services.export.symbol_blocks import ISO10628BlockLibrary
-
 
 # Fixtures
 

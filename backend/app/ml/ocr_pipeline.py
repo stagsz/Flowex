@@ -162,20 +162,12 @@ class OCRPipeline:
 
     def _normalize_tag(self, text: str) -> str:
         """Normalize tag format (uppercase, standard separators)."""
-        # Convert to uppercase
+        # Convert to uppercase and strip whitespace
         normalized = text.upper().strip()
 
-        # Replace common OCR errors
-        replacements = {
-            "0": "O",  # Sometimes 0 should be O in tags
-            "I": "1",  # Sometimes I should be 1 in numbers
-            "l": "1",  # Lowercase L to 1
-            " ": "-",  # Spaces to dashes
-        }
-
-        # Only apply number-to-letter fixes in letter positions
-        # and letter-to-number fixes in number positions
-        # (This is a simplified version - production would be smarter)
+        # Note: Common OCR error corrections (0->O, I->1, l->1) could be applied
+        # context-sensitively here based on tag format patterns, but for now
+        # we rely on the regex validation to catch invalid characters
 
         return normalized
 

@@ -1,6 +1,5 @@
 """Tests for the ML pipeline components."""
 
-import pytest
 
 from app.ml.ocr_pipeline import OCRPipeline, TagAssociator, TagType
 

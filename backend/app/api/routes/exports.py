@@ -133,7 +133,7 @@ async def export_drawing_dxf(
 
     Returns a job ID that can be used to check status and download the file.
     """
-    drawing = _get_drawing_with_access_check(drawing_id, db, current_user)
+    _get_drawing_with_access_check(drawing_id, db, current_user)
 
     # Validate paper size
     try:
@@ -249,7 +249,7 @@ async def export_data_lists(
     Available lists: equipment, line, instrument, valve, mto
     Available formats: xlsx, csv, pdf
     """
-    drawing = _get_drawing_with_access_check(drawing_id, db, current_user)
+    _get_drawing_with_access_check(drawing_id, db, current_user)
 
     # Validate format
     try:
@@ -387,7 +387,7 @@ async def export_comparison_report(
     """
     Generate extraction summary/comparison report.
     """
-    drawing = _get_drawing_with_access_check(drawing_id, db, current_user)
+    _get_drawing_with_access_check(drawing_id, db, current_user)
 
     try:
         export_format = ExportFormat(format)
