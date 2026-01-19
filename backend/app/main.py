@@ -57,6 +57,30 @@ app = FastAPI(
 )
 
 
+# Global exception handler to ensure CORS headers on errors
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Handle all uncaught exceptions and ensure CORS headers are present."""
+    from fastapi.responses import JSONResponse
+    import traceback
+
+    # Log the full error
+    logger.error(f"Unhandled exception: {exc}\n{traceback.format_exc()}")
+
+    # Return error with CORS headers
+    origin = request.headers.get("origin")
+    headers = {}
+    if origin and origin in settings.CORS_ORIGINS:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc) if settings.DEBUG else "Internal server error"},
+        headers=headers,
+    )
+
+
 class RequestIDMiddleware(BaseHTTPMiddleware):
     """Middleware to add request correlation IDs for log tracing."""
 

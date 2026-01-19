@@ -79,13 +79,19 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str = ""  # Public anon key
     SUPABASE_SERVICE_ROLE_KEY: str = ""  # Service role key (for backend operations)
     SUPABASE_STORAGE_BUCKET: str = "drawings"  # Bucket name in Supabase Storage
+    SUPABASE_JWT_SECRET: str = ""  # JWT secret from Supabase dashboard (Settings > API)
 
-    # Authentication
+    # Authentication Provider: "supabase" or "auth0"
+    AUTH_PROVIDER: str = "supabase"
+
+    # Auth0 Configuration (legacy - use AUTH_PROVIDER=auth0 to enable)
     AUTH0_DOMAIN: str = ""
     AUTH0_CLIENT_ID: str = ""
     AUTH0_CLIENT_SECRET: str = ""
+
+    # JWT Configuration
     JWT_SECRET_KEY: str = "dev-secret-key-change-in-production"
-    JWT_ALGORITHM: str = "RS256"
+    JWT_ALGORITHM: str = "HS256"  # HS256 for Supabase, RS256 for Auth0
     ACCESS_TOKEN_EXPIRE_HOURS: int = 24
 
     # AWS S3 (for production)

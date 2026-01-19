@@ -175,17 +175,29 @@ class SupabaseStorageService(BaseStorageService):
     """Service for managing file storage in Supabase Storage."""
 
     def __init__(self) -> None:
-        from supabase import create_client
+        from supabase import Client
+        from supabase.lib.client_options import ClientOptions
 
         if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
             raise StorageError(
                 "Supabase configuration missing. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY"
             )
 
-        self.client = create_client(
-            settings.SUPABASE_URL,
-            settings.SUPABASE_SERVICE_ROLE_KEY,
-        )
+        # Create client without proxy to avoid httpx version conflicts
+        try:
+            from supabase import create_client
+            self.client = create_client(
+                settings.SUPABASE_URL,
+                settings.SUPABASE_SERVICE_ROLE_KEY,
+            )
+        except TypeError:
+            # Fallback for older/newer versions with different signatures
+            options = ClientOptions()
+            self.client = Client(
+                settings.SUPABASE_URL,
+                settings.SUPABASE_SERVICE_ROLE_KEY,
+                options=options,
+            )
         self.bucket = settings.SUPABASE_STORAGE_BUCKET
         self._ensure_bucket_exists()
 

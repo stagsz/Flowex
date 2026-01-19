@@ -1,6 +1,8 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import * as Sentry from "@sentry/react"
+import { supabase } from "@/lib/supabase"
+import type { User as SupabaseUser, Session } from "@supabase/supabase-js"
 
 // Dev auth bypass - auto-login with dev user in development
 const DEV_AUTH_BYPASS = import.meta.env.VITE_DEV_AUTH_BYPASS === "true"
@@ -29,12 +31,34 @@ interface AuthState {
   token: string | null
   isLoading: boolean
   error: string | null
-  login: () => void
-  logout: () => void
+  login: (provider: "google" | "azure") => Promise<void>
+  logout: () => Promise<void>
   setUser: (user: User | null) => void
   setToken: (token: string | null) => void
   setError: (error: string | null) => void
   checkAuth: () => Promise<void>
+  handleAuthCallback: () => Promise<void>
+}
+
+// Convert Supabase user to our User format
+function mapSupabaseUser(supabaseUser: SupabaseUser, session: Session | null): User {
+  const metadata = supabaseUser.user_metadata || {}
+  const appMetadata = supabaseUser.app_metadata || {}
+
+  // Extract org info from email domain if not set
+  const emailDomain = supabaseUser.email?.split("@")[1] || "unknown"
+  const orgName = emailDomain.split(".")[0]
+  const orgId = appMetadata.org_id || `org-${orgName}`
+
+  return {
+    id: supabaseUser.id,
+    email: supabaseUser.email || "",
+    name: metadata.full_name || metadata.name || supabaseUser.email?.split("@")[0] || "User",
+    avatar: metadata.avatar_url || metadata.picture,
+    role: appMetadata.role || "member",
+    organizationId: orgId,
+    organizationName: metadata.organization_name || orgName.charAt(0).toUpperCase() + orgName.slice(1),
+  }
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -45,18 +69,34 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       error: null,
 
-      login: () => {
+      login: async (provider: "google" | "azure") => {
         if (DEV_AUTH_BYPASS) {
           set({ user: DEV_USER, token: "dev-token" })
           return
         }
-        // Redirect to Auth0 login
-        window.location.href = "/api/auth/login"
+
+        set({ isLoading: true, error: null })
+
+        try {
+          const { error } = await supabase.auth.signInWithOAuth({
+            provider: provider === "azure" ? "azure" : "google",
+            options: {
+              redirectTo: `${window.location.origin}/auth/callback`,
+            },
+          })
+
+          if (error) {
+            set({ error: error.message, isLoading: false })
+          }
+          // OAuth will redirect, so we don't need to do anything else here
+        } catch (err) {
+          set({ error: "Failed to initiate login", isLoading: false })
+        }
       },
 
       logout: async () => {
         try {
-          await fetch("/api/auth/logout", { method: "POST" })
+          await supabase.auth.signOut()
         } catch {
           // Ignore errors on logout
         }
@@ -70,27 +110,79 @@ export const useAuthStore = create<AuthState>()(
       setToken: (token) => set({ token }),
       setError: (error) => set({ error }),
 
-      checkAuth: async () => {
+      // Handle OAuth callback
+      handleAuthCallback: async () => {
         if (DEV_AUTH_BYPASS) {
           set({ user: DEV_USER, token: "dev-token", isLoading: false })
           return
         }
+
         set({ isLoading: true, error: null })
+
         try {
-          const response = await fetch("/api/auth/me", {
-            headers: {
-              Authorization: `Bearer ${get().token}`,
-            },
-          })
-          if (response.ok) {
-            const user = await response.json()
-            // Set Sentry user context for error tracking
+          // Supabase will automatically handle the OAuth callback
+          // and set the session from URL params
+          const { data: { session }, error } = await supabase.auth.getSession()
+
+          if (error) {
+            set({ error: error.message, isLoading: false })
+            return
+          }
+
+          if (session?.user) {
+            const user = mapSupabaseUser(session.user, session)
+
+            // Set Sentry user context
             Sentry.setUser({
               id: user.id,
               email: user.email,
               username: user.name,
             })
-            set({ user, isLoading: false })
+
+            set({
+              user,
+              token: session.access_token,
+              isLoading: false,
+            })
+          } else {
+            set({ user: null, token: null, isLoading: false })
+          }
+        } catch {
+          set({ error: "Failed to complete authentication", isLoading: false })
+        }
+      },
+
+      checkAuth: async () => {
+        if (DEV_AUTH_BYPASS) {
+          set({ user: DEV_USER, token: "dev-token", isLoading: false })
+          return
+        }
+
+        set({ isLoading: true, error: null })
+
+        try {
+          const { data: { session }, error } = await supabase.auth.getSession()
+
+          if (error) {
+            set({ user: null, token: null, isLoading: false })
+            return
+          }
+
+          if (session?.user) {
+            const user = mapSupabaseUser(session.user, session)
+
+            // Set Sentry user context
+            Sentry.setUser({
+              id: user.id,
+              email: user.email,
+              username: user.name,
+            })
+
+            set({
+              user,
+              token: session.access_token,
+              isLoading: false,
+            })
           } else {
             set({ user: null, token: null, isLoading: false })
           }
@@ -107,3 +199,28 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 )
+
+// Listen for auth state changes
+supabase.auth.onAuthStateChange((event, session) => {
+  if (DEV_AUTH_BYPASS) return
+
+  const store = useAuthStore.getState()
+
+  if (event === "SIGNED_IN" && session?.user) {
+    const user = mapSupabaseUser(session.user, session)
+    store.setUser(user)
+    store.setToken(session.access_token)
+
+    Sentry.setUser({
+      id: user.id,
+      email: user.email,
+      username: user.name,
+    })
+  } else if (event === "SIGNED_OUT") {
+    store.setUser(null)
+    store.setToken(null)
+    Sentry.setUser(null)
+  } else if (event === "TOKEN_REFRESHED" && session) {
+    store.setToken(session.access_token)
+  }
+})

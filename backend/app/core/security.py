@@ -54,7 +54,7 @@ class Auth0JWKSClient:
             return self._jwks
 
 
-# Global JWKS client instance
+# Global JWKS client instance (for Auth0)
 _jwks_client: Auth0JWKSClient | None = None
 
 
@@ -66,7 +66,43 @@ def get_jwks_client() -> Auth0JWKSClient:
     return _jwks_client
 
 
-async def verify_token(token: str) -> TokenPayload:
+async def verify_supabase_token(token: str) -> TokenPayload:
+    """Verify and decode a JWT token from Supabase Auth."""
+    try:
+        # Supabase uses HS256 with JWT secret
+        jwt_secret = settings.SUPABASE_JWT_SECRET
+        if not jwt_secret:
+            raise JWTError("SUPABASE_JWT_SECRET not configured")
+
+        # Decode and verify token
+        payload = jwt.decode(
+            token,
+            jwt_secret,
+            algorithms=["HS256"],
+            audience="authenticated",
+        )
+
+        # Extract user metadata from Supabase token structure
+        # Supabase tokens have: sub, email, role, aud, exp, iat
+        # User metadata is in user_metadata or app_metadata
+        user_metadata = payload.get("user_metadata", {})
+        app_metadata = payload.get("app_metadata", {})
+
+        return TokenPayload(
+            sub=payload["sub"],
+            exp=datetime.fromtimestamp(payload["exp"], tz=UTC),
+            iat=datetime.fromtimestamp(payload["iat"], tz=UTC),
+            email=payload.get("email"),
+            name=user_metadata.get("name") or user_metadata.get("full_name"),
+            org_id=app_metadata.get("org_id"),
+            role=app_metadata.get("role") or payload.get("role"),
+        )
+
+    except JWTError as e:
+        raise ValueError(f"Invalid Supabase token: {e}") from e
+
+
+async def verify_auth0_token(token: str) -> TokenPayload:
     """Verify and decode a JWT token from Auth0."""
     try:
         # Decode header to get key ID
@@ -85,7 +121,7 @@ async def verify_token(token: str) -> TokenPayload:
         payload = jwt.decode(
             token,
             signing_key,
-            algorithms=[settings.JWT_ALGORITHM],
+            algorithms=["RS256"],
             audience=settings.AUTH0_CLIENT_ID,
             issuer=f"https://{settings.AUTH0_DOMAIN}/",
         )
@@ -101,7 +137,15 @@ async def verify_token(token: str) -> TokenPayload:
         )
 
     except JWTError as e:
-        raise ValueError(f"Invalid token: {e}") from e
+        raise ValueError(f"Invalid Auth0 token: {e}") from e
+
+
+async def verify_token(token: str) -> TokenPayload:
+    """Verify and decode a JWT token based on configured auth provider."""
+    if settings.AUTH_PROVIDER == "supabase":
+        return await verify_supabase_token(token)
+    else:
+        return await verify_auth0_token(token)
 
 
 def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
@@ -110,6 +154,5 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
     now = datetime.now(UTC)
     expire = now + (expires_delta or timedelta(hours=settings.ACCESS_TOKEN_EXPIRE_HOURS))
     to_encode.update({"exp": expire, "iat": now})
-    # Use HS256 for internal tokens (JWT_SECRET_KEY is symmetric)
-    # Note: Auth0 tokens use RS256 with JWKS verification
+    # Use HS256 for internal tokens
     return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm="HS256")

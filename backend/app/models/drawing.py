@@ -22,11 +22,12 @@ class FileType(str, enum.Enum):
 
 
 class DrawingStatus(str, enum.Enum):
-    UPLOADED = "uploaded"
-    PROCESSING = "processing"
-    REVIEW = "review"
-    COMPLETE = "complete"
-    ERROR = "error"
+    # Names must match database enum values (lowercase)
+    uploaded = "uploaded"
+    processing = "processing"
+    review = "review"
+    complete = "complete"
+    error = "error"
 
 
 class Drawing(Base, UUIDMixin, TimestampMixin):
@@ -43,7 +44,7 @@ class Drawing(Base, UUIDMixin, TimestampMixin):
     file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     file_type: Mapped[FileType | None] = mapped_column(Enum(FileType), nullable=True)
     status: Mapped[DrawingStatus] = mapped_column(
-        Enum(DrawingStatus),
+        Enum(DrawingStatus, name="drawingstatus", create_constraint=False),
         default=DrawingStatus.UPLOADED,
         nullable=False,
         index=True,

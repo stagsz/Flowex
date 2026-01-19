@@ -49,26 +49,148 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
 
-@router.get("/login")
-async def login(
-    provider: str = Query(..., description="SSO provider: 'microsoft' or 'google'"),
-    redirect_uri: str = Query(..., description="URI to redirect after login"),
-) -> RedirectResponse:
-    """Initiate SSO login flow."""
-    if provider not in ["microsoft", "google"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid provider. Use 'microsoft' or 'google'",
+# =============================================================================
+# Supabase Auth Routes
+# =============================================================================
+
+
+async def _supabase_login(provider: str, redirect_uri: str) -> RedirectResponse:
+    """Initiate Supabase OAuth login flow."""
+    # Build Supabase OAuth URL
+    # Supabase OAuth endpoint: {SUPABASE_URL}/auth/v1/authorize
+    params = {
+        "provider": provider,
+        "redirect_to": redirect_uri,
+    }
+    auth_url = f"{settings.SUPABASE_URL}/auth/v1/authorize?{urlencode(params)}"
+    return RedirectResponse(url=auth_url)
+
+
+async def _supabase_callback(
+    code: str,
+    redirect_uri: str,
+    db: Session,
+) -> TokenResponse:
+    """Handle Supabase OAuth callback."""
+    # Exchange code for tokens via Supabase
+    token_url = f"{settings.SUPABASE_URL}/auth/v1/token?grant_type=authorization_code"
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            token_url,
+            headers={
+                "apikey": settings.SUPABASE_ANON_KEY,
+                "Content-Type": "application/json",
+            },
+            json={
+                "auth_code": code,
+                "code_verifier": "",  # PKCE not used in this flow
+            },
         )
 
-    # Validate redirect URI to prevent open redirect attacks
-    if not _is_valid_redirect_uri(redirect_uri):
+        if response.status_code != 200:
+            # Try alternative token exchange format
+            response = await client.post(
+                f"{settings.SUPABASE_URL}/auth/v1/token",
+                headers={
+                    "apikey": settings.SUPABASE_ANON_KEY,
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": redirect_uri,
+                },
+            )
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Failed to exchange authorization code: {response.text}",
+            )
+        tokens = response.json()
+
+    # Get user from token response (Supabase includes user in token response)
+    user_data = tokens.get("user", {})
+    email = user_data.get("email")
+
+    if not email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid redirect URI. Must match allowed origins.",
+            detail="Email not provided by SSO provider",
         )
 
-    # Build Auth0 authorization URL
+    # Find or create user in our database
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        # Create organization and user for new users
+        org_name = email.split("@")[1].split(".")[0].title()
+        org_slug = email.split("@")[1].replace(".", "-").lower()
+
+        # Check if org exists
+        org = db.query(Organization).filter(Organization.slug == org_slug).first()
+        if not org:
+            org = Organization(name=org_name, slug=org_slug)
+            db.add(org)
+            db.flush()
+
+        # Determine SSO provider from identity data
+        identities = user_data.get("identities", [])
+        provider_name = identities[0].get("provider", "google") if identities else "google"
+        sso_provider = SSOProvider.GOOGLE if "google" in provider_name else SSOProvider.MICROSOFT
+
+        user = User(
+            email=email,
+            name=user_data.get("user_metadata", {}).get("full_name")
+            or user_data.get("user_metadata", {}).get("name"),
+            organization_id=org.id,
+            sso_provider=sso_provider,
+            sso_subject_id=user_data.get("id", ""),
+        )
+        db.add(user)
+        db.commit()
+
+    return TokenResponse(
+        access_token=tokens["access_token"],
+        expires_in=tokens.get("expires_in", 3600),
+        refresh_token=tokens.get("refresh_token"),
+    )
+
+
+async def _supabase_refresh(refresh_token: str) -> TokenResponse:
+    """Refresh Supabase access token."""
+    token_url = f"{settings.SUPABASE_URL}/auth/v1/token?grant_type=refresh_token"
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            token_url,
+            headers={
+                "apikey": settings.SUPABASE_ANON_KEY,
+                "Content-Type": "application/json",
+            },
+            json={"refresh_token": refresh_token},
+        )
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired refresh token",
+            )
+        tokens = response.json()
+
+    return TokenResponse(
+        access_token=tokens["access_token"],
+        expires_in=tokens.get("expires_in", 3600),
+        refresh_token=tokens.get("refresh_token"),
+    )
+
+
+# =============================================================================
+# Auth0 Routes (Legacy)
+# =============================================================================
+
+
+async def _auth0_login(provider: str, redirect_uri: str) -> RedirectResponse:
+    """Initiate Auth0 OAuth login flow."""
     params = {
         "client_id": settings.AUTH0_CLIENT_ID,
         "response_type": "code",
@@ -80,20 +202,12 @@ async def login(
     return RedirectResponse(url=auth_url)
 
 
-@router.get("/callback")
-async def callback(
-    code: str = Query(..., description="Authorization code from Auth0"),
-    redirect_uri: str = Query(..., description="Original redirect URI"),
-    db: Session = Depends(get_db),
+async def _auth0_callback(
+    code: str,
+    redirect_uri: str,
+    db: Session,
 ) -> TokenResponse:
-    """Handle OAuth callback and exchange code for tokens."""
-    # Validate redirect URI to prevent token theft via open redirect
-    if not _is_valid_redirect_uri(redirect_uri):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid redirect URI. Must match allowed origins.",
-        )
-
+    """Handle Auth0 OAuth callback."""
     # Exchange code for tokens
     token_url = f"https://{settings.AUTH0_DOMAIN}/oauth/token"
     async with httpx.AsyncClient() as client:
@@ -170,9 +284,8 @@ async def callback(
     )
 
 
-@router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(request: RefreshTokenRequest) -> TokenResponse:
-    """Refresh access token using a refresh token from Auth0."""
+async def _auth0_refresh(refresh_token: str) -> TokenResponse:
+    """Refresh Auth0 access token."""
     token_url = f"https://{settings.AUTH0_DOMAIN}/oauth/token"
 
     async with httpx.AsyncClient() as client:
@@ -182,7 +295,7 @@ async def refresh_token(request: RefreshTokenRequest) -> TokenResponse:
                 "grant_type": "refresh_token",
                 "client_id": settings.AUTH0_CLIENT_ID,
                 "client_secret": settings.AUTH0_CLIENT_SECRET,
-                "refresh_token": request.refresh_token,
+                "refresh_token": refresh_token,
             },
         )
         if response.status_code != 200:
@@ -197,6 +310,65 @@ async def refresh_token(request: RefreshTokenRequest) -> TokenResponse:
         expires_in=tokens.get("expires_in", 86400),
         refresh_token=tokens.get("refresh_token"),
     )
+
+
+# =============================================================================
+# Public API Routes
+# =============================================================================
+
+
+@router.get("/login")
+async def login(
+    provider: str = Query(..., description="SSO provider: 'microsoft' or 'google'"),
+    redirect_uri: str = Query(..., description="URI to redirect after login"),
+) -> RedirectResponse:
+    """Initiate SSO login flow."""
+    if provider not in ["microsoft", "google"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid provider. Use 'microsoft' or 'google'",
+        )
+
+    # Validate redirect URI to prevent open redirect attacks
+    if not _is_valid_redirect_uri(redirect_uri):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid redirect URI. Must match allowed origins.",
+        )
+
+    if settings.AUTH_PROVIDER == "supabase":
+        return await _supabase_login(provider, redirect_uri)
+    else:
+        return await _auth0_login(provider, redirect_uri)
+
+
+@router.get("/callback")
+async def callback(
+    code: str = Query(..., description="Authorization code from OAuth provider"),
+    redirect_uri: str = Query(..., description="Original redirect URI"),
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    """Handle OAuth callback and exchange code for tokens."""
+    # Validate redirect URI to prevent token theft via open redirect
+    if not _is_valid_redirect_uri(redirect_uri):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid redirect URI. Must match allowed origins.",
+        )
+
+    if settings.AUTH_PROVIDER == "supabase":
+        return await _supabase_callback(code, redirect_uri, db)
+    else:
+        return await _auth0_callback(code, redirect_uri, db)
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(request: RefreshTokenRequest) -> TokenResponse:
+    """Refresh access token using a refresh token."""
+    if settings.AUTH_PROVIDER == "supabase":
+        return await _supabase_refresh(request.refresh_token)
+    else:
+        return await _auth0_refresh(request.refresh_token)
 
 
 @router.post("/logout")
