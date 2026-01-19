@@ -41,7 +41,7 @@ interface AuthState {
 }
 
 // Convert Supabase user to our User format
-function mapSupabaseUser(supabaseUser: SupabaseUser, session: Session | null): User {
+function mapSupabaseUser(supabaseUser: SupabaseUser, _session: Session | null): User {
   const metadata = supabaseUser.user_metadata || {}
   const appMetadata = supabaseUser.app_metadata || {}
 
@@ -63,7 +63,7 @@ function mapSupabaseUser(supabaseUser: SupabaseUser, session: Session | null): U
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: DEV_AUTH_BYPASS ? DEV_USER : null,
       token: DEV_AUTH_BYPASS ? "dev-token" : null,
       isLoading: false,

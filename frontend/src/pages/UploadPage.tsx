@@ -41,7 +41,7 @@ export function UploadPage() {
   const [isDragOver, setIsDragOver] = useState(false)
   const [selectedProject, setSelectedProject] = useState("")
   const [projects, setProjects] = useState<Project[]>([])
-  const [loadingProjects, setLoadingProjects] = useState(true)
+  const [, setLoadingProjects] = useState(true)
 
   // Fetch projects from API
   useEffect(() => {
