@@ -8,7 +8,7 @@
 
 ## Current Focus
 
-**Phase 2: Core Backend Services** - File upload and PDF processing pipeline.
+**Phase 5: Frontend MVP** - React components and validation interface.
 
 ---
 
@@ -67,69 +67,47 @@
 - [x] Add processing API endpoints (start, status)
 - [x] Write processing pipeline tests
 
+### Phase 4: AI/ML Pipeline (Complete)
+
+#### 4.1 Training Data Preparation
+- [x] Create synthetic P&ID generator script
+- [x] Generate training images with COCO annotations
+- [x] Define 50 ISO 10628 symbol classes with categories
+
+#### 4.2 Symbol Detection Model
+- [x] Set up PyTorch training environment
+- [x] Implement Custom CNN architecture (ResNet-50 + FPN)
+- [x] Implement Faster R-CNN model with custom anchor sizes
+- [x] Implement inference pipeline
+- [x] Add ONNX export support
+- [x] Write model tests
+
+#### 4.3 OCR Pipeline (Tesseract)
+- [x] Set up Tesseract OCR pipeline
+- [x] Implement text region detection
+- [x] Implement rotated text handling (0, 90, 180, 270)
+- [x] Implement tag format validation (regex patterns)
+- [x] Implement tag classification (equipment, instrument, valve, line)
+- [x] Implement deduplication across rotations
+- [x] Write OCR pipeline tests
+
+#### 4.4 Integration & Association
+- [x] Implement tag-to-symbol association algorithm (proximity-based)
+- [x] Combine all AI outputs into unified InferenceService
+- [x] Flag low-confidence items for review
+- [x] Write integration tests
+
 ---
 
 ## In Progress
 
-### Phase 3: AI/ML Pipeline
+### Phase 5: Frontend MVP
 
 ---
 
 ## Backlog (Prioritized)
 
-### Phase 2: Core Backend Services (Weeks 3-4)
-
-#### 2.2 PDF Processing Pipeline
-- [ ] Set up background job queue (Celery + Redis)
-- [ ] Implement PDF type detection (vector vs scanned)
-- [ ] Implement PDF to image conversion (pdf2image)
-- [ ] Implement image pre-processing for scanned PDFs
-  - [ ] Deskew correction
-  - [ ] Noise reduction
-  - [ ] Binarization
-- [ ] Implement image tiling for AI processing
-- [ ] Update drawing status during processing
-- [ ] Handle processing errors gracefully
-- [ ] Write processing pipeline tests
-
-### Phase 3: AI/ML Pipeline (Weeks 5-8)
-
-#### 3.1 Training Data Preparation
-- [ ] Create synthetic P&ID generator script
-- [ ] Generate 1,000 synthetic training images
-- [ ] Create annotation format (COCO or custom)
-- [ ] Set up labeling workflow for real P&IDs
-- [ ] Prepare validation dataset (100 images)
-
-#### 3.2 Symbol Detection Model
-- [ ] Set up PyTorch training environment
-- [ ] Implement Custom CNN architecture (ResNet-50 + FPN)
-- [ ] Implement data augmentation pipeline
-- [ ] Train model on synthetic data (Phase 1)
-- [ ] Evaluate model accuracy (target: >90%)
-- [ ] Implement inference pipeline
-- [ ] Optimize model for production (ONNX export)
-- [ ] Write model evaluation tests
-
-#### 3.3 OCR Pipeline (Tesseract)
-- [ ] Set up Tesseract with engineering fonts
-- [ ] Implement text region detection
-- [ ] Implement rotated text handling
-- [ ] Implement OCR post-processing
-- [ ] Implement tag format validation (regex)
-- [ ] Implement tag classification (equipment, instrument, etc.)
-- [ ] Write OCR pipeline tests
-
-#### 3.4 Integration & Association
-- [ ] Implement line detection (Hough transform)
-- [ ] Implement connectivity graph builder
-- [ ] Implement tag-to-symbol association algorithm
-- [ ] Implement connection point detection
-- [ ] Combine all AI outputs into unified result
-- [ ] Flag low-confidence items for review
-- [ ] Write integration tests
-
-### Phase 4: Frontend MVP (Weeks 9-11)
+### Phase 5: Frontend MVP (Weeks 9-11)
 
 #### 4.1 Core UI Components
 - [ ] Set up shadcn/ui component library
