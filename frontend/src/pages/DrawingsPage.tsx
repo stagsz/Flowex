@@ -32,7 +32,7 @@ interface Drawing {
   id: string
   name: string
   projectName: string
-  status: "pending" | "processing" | "completed" | "failed"
+  status: "uploaded" | "processing" | "review" | "complete" | "error"
   progress: number
   symbolsDetected: number
   createdAt: string
@@ -70,7 +70,7 @@ export function DrawingsPage() {
                   name: d.original_filename,
                   projectName: project.name,
                   status: d.status as Drawing["status"],
-                  progress: d.status === "completed" ? 100 : d.status === "processing" ? 50 : 0,
+                  progress: d.status === "complete" ? 100 : d.status === "review" ? 80 : d.status === "processing" ? 50 : 0,
                   symbolsDetected: 0, // Would come from symbols API
                   createdAt: new Date(d.created_at).toLocaleDateString(),
                   processedAt: d.processing_completed_at
@@ -96,9 +96,9 @@ export function DrawingsPage() {
   }, [apiUrl])
 
   const statusConfig = {
-    pending: {
+    uploaded: {
       icon: Clock,
-      label: "Pending",
+      label: "Uploaded",
       className: "text-yellow-500",
     },
     processing: {
@@ -106,14 +106,19 @@ export function DrawingsPage() {
       label: "Processing",
       className: "text-blue-500 animate-pulse",
     },
-    completed: {
+    review: {
+      icon: Eye,
+      label: "Review",
+      className: "text-orange-500",
+    },
+    complete: {
       icon: CheckCircle,
-      label: "Completed",
+      label: "Complete",
       className: "text-green-500",
     },
-    failed: {
+    error: {
       icon: AlertCircle,
-      label: "Failed",
+      label: "Error",
       className: "text-red-500",
     },
   }
@@ -157,7 +162,7 @@ export function DrawingsPage() {
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-muted-foreground" />
           <div className="flex gap-1">
-            {["all", "pending", "processing", "completed", "failed"].map(
+            {["all", "uploaded", "processing", "review", "complete", "error"].map(
               (status) => (
                 <Button
                   key={status}
@@ -235,7 +240,7 @@ export function DrawingsPage() {
                   </div>
 
                   <div className="hidden md:block text-right">
-                    {drawing.status === "completed" && (
+                    {(drawing.status === "complete" || drawing.status === "review") && (
                       <p className="text-sm font-medium">
                         {drawing.symbolsDetected} symbols
                       </p>
@@ -246,17 +251,16 @@ export function DrawingsPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {drawing.status === "completed" && (
-                      <>
-                        <Button variant="outline" size="sm" asChild>
-                          <Link to={`/drawings/${drawing.id}/validate`}>
-                            <Eye className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      </>
+                    {/* View button always available */}
+                    <Button variant="outline" size="sm" asChild>
+                      <Link to={`/drawings/${drawing.id}/validate`}>
+                        <Eye className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                    {(drawing.status === "complete" || drawing.status === "review") && (
+                      <Button variant="outline" size="sm">
+                        <Download className="h-4 w-4" />
+                      </Button>
                     )}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -270,14 +274,12 @@ export function DrawingsPage() {
                             View Details
                           </Link>
                         </DropdownMenuItem>
-                        {drawing.status === "completed" && (
-                          <DropdownMenuItem asChild>
-                            <Link to={`/drawings/${drawing.id}/validate`}>
-                              Validate
-                            </Link>
-                          </DropdownMenuItem>
-                        )}
-                        {drawing.status === "failed" && (
+                        <DropdownMenuItem asChild>
+                          <Link to={`/drawings/${drawing.id}/validate`}>
+                            View / Validate
+                          </Link>
+                        </DropdownMenuItem>
+                        {drawing.status === "error" && (
                           <DropdownMenuItem>Retry Processing</DropdownMenuItem>
                         )}
                         <DropdownMenuItem className="text-destructive">

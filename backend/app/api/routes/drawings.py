@@ -1,14 +1,17 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from app.core.config import StorageProvider, settings
 from app.core.deps import get_current_user, get_db
 from app.models import DrawingStatus, Project, Symbol, TextAnnotation, User
 from app.services import drawings as drawing_service
 from app.services.drawings import FileValidationError
+from app.services.storage import get_storage_service
 
 router = APIRouter(prefix="/drawings", tags=["drawings"])
 
@@ -143,6 +146,7 @@ async def list_drawings(
 @router.get("/{drawing_id}", response_model=DrawingWithUrlResponse)
 async def get_drawing(
     drawing_id: UUID,
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> DrawingWithUrlResponse:
@@ -156,9 +160,14 @@ async def get_drawing(
     if not project or project.organization_id != current_user.organization_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # Get download URL
+    # Get download URL - use API endpoint for local storage
     try:
-        download_url = await drawing_service.get_download_url(drawing)
+        if settings.STORAGE_PROVIDER == StorageProvider.LOCAL:
+            # For local storage, use the API download endpoint
+            base_url = str(request.base_url).rstrip("/")
+            download_url = f"{base_url}/api/v1/drawings/{drawing_id}/download"
+        else:
+            download_url = await drawing_service.get_download_url(drawing)
     except Exception:
         download_url = None
 
@@ -181,6 +190,40 @@ async def get_drawing(
             else None
         ),
         download_url=download_url,
+    )
+
+
+@router.get("/{drawing_id}/download")
+async def download_drawing(
+    drawing_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> Response:
+    """Download the original PDF file for a drawing."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Download file from storage
+    try:
+        storage = get_storage_service()
+        file_content = await storage.download_file(drawing.storage_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found in storage")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to download file: {e}")
+
+    return Response(
+        content=file_content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{drawing.original_filename}"',
+        },
     )
 
 

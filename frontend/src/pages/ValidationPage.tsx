@@ -49,7 +49,7 @@ interface SymbolSummary {
 
 export function ValidationPage() {
   const { drawingId } = useParams()
-  const [zoom, setZoom] = useState(100)
+  const [zoom, setZoom] = useState(50) // Start smaller for large P&ID drawings
   const [rotation, setRotation] = useState(0) // Default 0° - P&IDs are typically A1/A3 landscape
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -298,11 +298,14 @@ export function ValidationPage() {
           <div className="flex items-center justify-between p-2 border-b bg-muted/50">
             <span className="text-sm font-medium">Original P&ID</span>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" onClick={() => setZoom(Math.max(25, zoom - 25))}>
+              <Button variant="ghost" size="sm" className="text-xs px-2" onClick={() => setZoom(25)}>
+                Fit
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => setZoom(Math.max(10, zoom - 10))}>
                 <ZoomOut className="h-4 w-4" />
               </Button>
               <span className="text-sm w-12 text-center">{zoom}%</span>
-              <Button variant="ghost" size="icon" onClick={() => setZoom(Math.min(200, zoom + 25))}>
+              <Button variant="ghost" size="icon" onClick={() => setZoom(Math.min(200, zoom + 10))}>
                 <ZoomIn className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="icon" onClick={() => setRotation((r) => (r + 90) % 360)} title={`Rotate (${rotation}°)`}>
