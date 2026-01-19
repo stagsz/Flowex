@@ -283,6 +283,14 @@ _None_
   - Fixed mypy type errors in config.py (redis.from_url untyped call)
   - Fixed frontend API URLs from /api/ to /api/v1/ prefix in DrawingsPage, UploadPage, ValidationPage
 
+- [x] **Storage abstraction and additional mypy fixes** - `5cc038a`
+  - Fixed Drawing model attribute usage in cloud.py (original_filename, file_size_bytes)
+  - Refactored cloud tasks to use storage interface instead of direct S3 access
+  - Added proper async/await with asyncio.run() for storage operations
+  - Fixed Supabase signedUrl key (was incorrectly signedURL)
+  - Added type annotations to Celery task functions and middleware
+  - Reduced mypy errors from 61 to 23 (remaining are cosmetic dict type params)
+
 ---
 
 ## Technical Decisions
