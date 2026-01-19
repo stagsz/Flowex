@@ -30,6 +30,11 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+    refresh_token: str | None = None
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 
 @router.get("/login")
@@ -135,6 +140,36 @@ async def callback(
     return TokenResponse(
         access_token=tokens["access_token"],
         expires_in=tokens.get("expires_in", 86400),
+        refresh_token=tokens.get("refresh_token"),
+    )
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(request: RefreshTokenRequest) -> TokenResponse:
+    """Refresh access token using a refresh token from Auth0."""
+    token_url = f"https://{settings.AUTH0_DOMAIN}/oauth/token"
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            token_url,
+            json={
+                "grant_type": "refresh_token",
+                "client_id": settings.AUTH0_CLIENT_ID,
+                "client_secret": settings.AUTH0_CLIENT_SECRET,
+                "refresh_token": request.refresh_token,
+            },
+        )
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired refresh token",
+            )
+        tokens = response.json()
+
+    return TokenResponse(
+        access_token=tokens["access_token"],
+        expires_in=tokens.get("expires_in", 86400),
+        refresh_token=tokens.get("refresh_token"),
     )
 
 

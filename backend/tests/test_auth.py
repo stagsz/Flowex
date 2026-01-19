@@ -1,6 +1,5 @@
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.core.security import create_access_token
@@ -48,6 +47,59 @@ def test_logout():
     response = client.post("/api/v1/auth/logout")
     assert response.status_code == 200
     assert response.json()["message"] == "Logged out successfully"
+
+
+def test_refresh_token_missing_body():
+    """Test refresh endpoint requires refresh_token in body."""
+    response = client.post("/api/v1/auth/refresh", json={})
+    assert response.status_code == 422
+
+
+def test_refresh_token_invalid():
+    """Test refresh endpoint with invalid refresh token returns 401."""
+    # Mock Auth0 returning an error for invalid refresh token
+    with patch("app.api.routes.auth.httpx.AsyncClient") as mock_client:
+        mock_response = AsyncMock()
+        mock_response.status_code = 403
+        mock_client.return_value.__aenter__.return_value.post = AsyncMock(
+            return_value=mock_response
+        )
+
+        response = client.post(
+            "/api/v1/auth/refresh",
+            json={"refresh_token": "invalid_refresh_token"},
+        )
+        assert response.status_code == 401
+        assert "Invalid or expired refresh token" in response.json()["detail"]
+
+
+def test_refresh_token_success():
+    """Test refresh endpoint returns new tokens on success."""
+    # Mock Auth0 returning new tokens
+    with patch("app.api.routes.auth.httpx.AsyncClient") as mock_client:
+        mock_response = AsyncMock()
+        mock_response.status_code = 200
+        # Use a regular function for json() since it's not async
+        mock_response.json = lambda: {
+            "access_token": "new_access_token",
+            "refresh_token": "new_refresh_token",
+            "expires_in": 86400,
+            "token_type": "Bearer",
+        }
+        mock_client.return_value.__aenter__.return_value.post = AsyncMock(
+            return_value=mock_response
+        )
+
+        response = client.post(
+            "/api/v1/auth/refresh",
+            json={"refresh_token": "valid_refresh_token"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["access_token"] == "new_access_token"
+        assert data["refresh_token"] == "new_refresh_token"
+        assert data["expires_in"] == 86400
+        assert data["token_type"] == "bearer"
 
 
 def test_me_unauthorized():
