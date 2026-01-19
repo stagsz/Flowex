@@ -34,6 +34,7 @@ interface DetectedSymbol {
 export function ValidationPage() {
   const { drawingId } = useParams()
   const [zoom, setZoom] = useState(100)
+  const [rotation, setRotation] = useState(90) // Default 90° for landscape P&IDs
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterType, setFilterType] = useState("all")
@@ -127,17 +128,20 @@ export function ValidationPage() {
               <Button variant="ghost" size="icon" onClick={() => setZoom(Math.min(200, zoom + 25))}>
                 <ZoomIn className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" onClick={() => setRotation((r) => (r + 90) % 360)} title={`Rotate (${rotation}°)`}>
                 <RotateCw className="h-4 w-4" />
               </Button>
+              <span className="text-xs text-muted-foreground w-8">{rotation}°</span>
             </div>
           </div>
           <div className="flex-1 overflow-auto bg-muted/20 p-4">
             <div
-              className="bg-white shadow-lg mx-auto relative"
+              className="bg-white shadow-lg mx-auto relative transition-transform duration-300"
               style={{
-                width: `${600 * (zoom / 100)}px`,
-                height: `${800 * (zoom / 100)}px`,
+                width: `${(rotation % 180 === 0 ? 600 : 800) * (zoom / 100)}px`,
+                height: `${(rotation % 180 === 0 ? 800 : 600) * (zoom / 100)}px`,
+                transform: `rotate(${rotation}deg)`,
+                transformOrigin: 'center center',
               }}
             >
               {/* Placeholder for PDF viewer */}
