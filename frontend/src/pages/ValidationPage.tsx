@@ -1,5 +1,8 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useParams, Link } from "react-router-dom"
+import { Document, Page, pdfjs } from "react-pdf"
+import "react-pdf/dist/Page/AnnotationLayer.css"
+import "react-pdf/dist/Page/TextLayer.css"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
@@ -16,8 +19,12 @@ import {
   CheckCircle,
   AlertTriangle,
   Filter,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+
+// Set up PDF.js worker
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
 
 interface DetectedSymbol {
   id: string
@@ -39,13 +46,67 @@ export function ValidationPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [filterType, setFilterType] = useState("all")
   const [showLowConfidence] = useState(true)
+  const [numPages, setNumPages] = useState<number | null>(null)
+  const [pageNumber] = useState(1)
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+  const [pdfLoading, setPdfLoading] = useState(true)
+  const [pdfError, setPdfError] = useState<string | null>(null)
 
   // Mock data - would come from API
   const drawing = {
     id: drawingId,
     name: "P&ID-001-Rev3.pdf",
     projectName: "Refinery Unit A",
-    imageUrl: "/placeholder-pid.png",
+  }
+
+  // Fetch PDF URL from backend API
+  useEffect(() => {
+    async function fetchPdfUrl() {
+      try {
+        setPdfLoading(true)
+        setPdfError(null)
+        // In production, this would fetch from the API:
+        // const response = await fetch(`/api/drawings/${drawingId}/pdf-url`)
+        // const data = await response.json()
+        // setPdfUrl(data.url)
+
+        // Fetch drawing details from backend API
+        const apiUrl = import.meta.env.VITE_API_URL || ''
+        const response = await fetch(`${apiUrl}/api/drawings/${drawingId}`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.download_url) {
+            setPdfUrl(data.download_url)
+          } else {
+            setPdfError("No PDF URL available for this drawing")
+          }
+        } else if (response.status === 401) {
+          setPdfError("Authentication required. Please log in.")
+        } else if (response.status === 404) {
+          setPdfError("Drawing not found")
+        } else {
+          setPdfError("Could not load drawing")
+        }
+      } catch {
+        setPdfError("Failed to connect to API")
+      } finally {
+        setPdfLoading(false)
+      }
+    }
+
+    if (drawingId) {
+      fetchPdfUrl()
+    }
+  }, [drawingId])
+
+  function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
+    setNumPages(numPages)
+    setPdfLoading(false)
+  }
+
+  function onDocumentLoadError(error: Error) {
+    setPdfError(`Failed to load PDF: ${error.message}`)
+    setPdfLoading(false)
   }
 
   const symbols: DetectedSymbol[] = [
@@ -134,30 +195,65 @@ export function ValidationPage() {
               <span className="text-xs text-muted-foreground w-8">{rotation}°</span>
             </div>
           </div>
-          <div className="flex-1 overflow-auto bg-muted/20 p-4">
+          <div className="flex-1 overflow-auto bg-muted/20 p-4 flex items-center justify-center">
             <div
-              className="bg-white shadow-lg mx-auto relative transition-transform duration-300"
+              className="bg-white shadow-lg relative transition-transform duration-300"
               style={{
-                // A1/A3 aspect ratio (1.414:1) - landscape by default
-                width: `${(rotation % 180 === 0 ? 840 : 594) * (zoom / 100)}px`,
-                height: `${(rotation % 180 === 0 ? 594 : 840) * (zoom / 100)}px`,
                 transform: `rotate(${rotation}deg)`,
                 transformOrigin: 'center center',
               }}
             >
-              {/* Placeholder for PDF viewer */}
-              <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                <span>PDF Viewer</span>
-              </div>
+              {/* PDF Viewer */}
+              {pdfLoading && (
+                <div className="flex items-center justify-center p-20">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-muted-foreground">Loading PDF...</span>
+                </div>
+              )}
+
+              {pdfError && !pdfUrl && (
+                <div className="flex flex-col items-center justify-center p-20 text-muted-foreground">
+                  <AlertTriangle className="h-12 w-12 mb-4 text-yellow-500" />
+                  <p className="text-center">{pdfError}</p>
+                  <p className="text-sm mt-2">Drawing ID: {drawingId}</p>
+                </div>
+              )}
+
+              {pdfUrl && (
+                <Document
+                  file={pdfUrl}
+                  onLoadSuccess={onDocumentLoadSuccess}
+                  onLoadError={onDocumentLoadError}
+                  loading={
+                    <div className="flex items-center justify-center p-20">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    </div>
+                  }
+                >
+                  <Page
+                    pageNumber={pageNumber}
+                    scale={zoom / 100}
+                    renderTextLayer={true}
+                    renderAnnotationLayer={true}
+                  />
+                </Document>
+              )}
+
+              {numPages && numPages > 1 && (
+                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/50 text-white px-2 py-1 rounded text-xs">
+                  Page {pageNumber} of {numPages}
+                </div>
+              )}
+
               {/* Highlight selected symbol */}
-              {selectedSymbol && (
+              {selectedSymbol && pdfUrl && (
                 <div
-                  className="absolute border-2 border-primary bg-primary/10"
+                  className="absolute border-2 border-primary bg-primary/10 pointer-events-none"
                   style={{
-                    left: `${symbols.find((s) => s.id === selectedSymbol)?.x || 0}px`,
-                    top: `${symbols.find((s) => s.id === selectedSymbol)?.y || 0}px`,
-                    width: `${symbols.find((s) => s.id === selectedSymbol)?.width || 0}px`,
-                    height: `${symbols.find((s) => s.id === selectedSymbol)?.height || 0}px`,
+                    left: `${(symbols.find((s) => s.id === selectedSymbol)?.x || 0) * (zoom / 100)}px`,
+                    top: `${(symbols.find((s) => s.id === selectedSymbol)?.y || 0) * (zoom / 100)}px`,
+                    width: `${(symbols.find((s) => s.id === selectedSymbol)?.width || 0) * (zoom / 100)}px`,
+                    height: `${(symbols.find((s) => s.id === selectedSymbol)?.height || 0) * (zoom / 100)}px`,
                   }}
                 />
               )}

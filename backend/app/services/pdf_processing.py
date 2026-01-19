@@ -1,6 +1,6 @@
 import io
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 import fitz  # PyMuPDF
 from PIL import Image
@@ -86,7 +86,7 @@ def pdf_to_images(
             pixmap = page.get_pixmap(matrix=matrix)
 
             # Convert to PIL Image
-            img = Image.frombytes("RGB", [pixmap.width, pixmap.height], pixmap.samples)
+            img = Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
 
             # Resize if too large
             if img.width > max_size or img.height > max_size:
@@ -128,7 +128,7 @@ def preprocess_scanned_image(image_bytes: bytes) -> bytes:
     """
     try:
         # Load image
-        img = Image.open(io.BytesIO(image_bytes))
+        img: Image.Image = Image.open(io.BytesIO(image_bytes))
 
         # Convert to grayscale
         if img.mode != "L":
@@ -165,7 +165,7 @@ def create_image_tiles(
     image_bytes: bytes,
     tile_size: int = TILE_SIZE,
     overlap: int = 64,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """
     Split an image into overlapping tiles for AI processing.
 
@@ -215,7 +215,7 @@ def create_image_tiles(
         raise PDFProcessingError(f"Failed to create image tiles: {e}") from e
 
 
-def get_pdf_metadata(pdf_bytes: bytes) -> dict:
+def get_pdf_metadata(pdf_bytes: bytes) -> dict[str, Any]:
     """Extract metadata from a PDF file."""
     try:
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")

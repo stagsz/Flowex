@@ -73,3 +73,9 @@ images/*.svg
 frontend/playwright-report/
 frontend/test-results/
 frontend/npm-output.txt
+
+# Root-level screenshots and images (temporary files)
+/image.png
+/*.png
+/*.jpg
+/*.jpeg

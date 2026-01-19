@@ -61,7 +61,9 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "STORAGE_PROVIDER", value = "aws" },
         { name = "AWS_REGION", value = var.aws_region },
         { name = "AWS_S3_BUCKET", value = aws_s3_bucket.uploads.id },
-        { name = "CORS_ORIGINS", value = "https://${var.environment == "production" ? "" : "${var.environment}."}${var.domain_name}" }
+        { name = "CORS_ORIGINS", value = "https://${var.environment == "production" ? "" : "${var.environment}."}${var.domain_name}" },
+        { name = "MICROSOFT_REDIRECT_URI", value = "https://api.${var.environment == "production" ? "" : "${var.environment}."}${var.domain_name}/api/v1/cloud/callback/microsoft" },
+        { name = "GOOGLE_REDIRECT_URI", value = "https://api.${var.environment == "production" ? "" : "${var.environment}."}${var.domain_name}/api/v1/cloud/callback/google" }
       ]
 
       secrets = [
@@ -71,7 +73,11 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "AUTH0_DOMAIN", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:AUTH0_DOMAIN::" },
         { name = "AUTH0_CLIENT_ID", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:AUTH0_CLIENT_ID::" },
         { name = "AUTH0_CLIENT_SECRET", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:AUTH0_CLIENT_SECRET::" },
-        { name = "TOKEN_ENCRYPTION_KEY", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:TOKEN_ENCRYPTION_KEY::" }
+        { name = "TOKEN_ENCRYPTION_KEY", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:TOKEN_ENCRYPTION_KEY::" },
+        { name = "MICROSOFT_CLIENT_ID", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:MICROSOFT_CLIENT_ID::" },
+        { name = "MICROSOFT_CLIENT_SECRET", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:MICROSOFT_CLIENT_SECRET::" },
+        { name = "GOOGLE_CLIENT_ID", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:GOOGLE_CLIENT_ID::" },
+        { name = "GOOGLE_CLIENT_SECRET", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:GOOGLE_CLIENT_SECRET::" }
       ]
 
       logConfiguration = {

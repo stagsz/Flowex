@@ -9,6 +9,7 @@ import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 import pytesseract
 from PIL import Image
@@ -179,7 +180,7 @@ class OCRPipeline:
         # Sort by confidence (highest first)
         texts.sort(key=lambda t: t.confidence, reverse=True)
 
-        unique = []
+        unique: list[ExtractedText] = []
         for text in texts:
             # Check if we already have this text (similar bbox)
             is_duplicate = False
@@ -224,8 +225,8 @@ class TagAssociator:
     def associate(
         self,
         texts: list[ExtractedText],
-        symbols: list[dict],  # List of {bbox, class_id, class_name}
-    ) -> list[dict]:
+        symbols: list[dict[str, Any]],  # List of {bbox, class_id, class_name}
+    ) -> list[dict[str, Any]]:
         """
         Associate tags with nearby symbols.
 
