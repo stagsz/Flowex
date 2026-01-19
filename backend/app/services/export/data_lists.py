@@ -78,7 +78,7 @@ THIN_BORDER = Border(
 class DataListExportService:
     """Service for exporting engineering data lists."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.output_dir = Path(tempfile.gettempdir()) / "flowex_exports"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 

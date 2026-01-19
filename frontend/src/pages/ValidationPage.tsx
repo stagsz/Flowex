@@ -72,7 +72,7 @@ export function ValidationPage() {
 
         // Fetch drawing details from backend API
         const apiUrl = import.meta.env.VITE_API_URL || ''
-        const response = await fetch(`${apiUrl}/api/drawings/${drawingId}`)
+        const response = await fetch(`${apiUrl}/api/v1/drawings/${drawingId}`)
         if (response.ok) {
           const data = await response.json()
           if (data.download_url) {

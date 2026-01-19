@@ -30,7 +30,7 @@ class DetectedSymbol:
 class AnalysisResult:
     symbols: list[DetectedSymbol]
     texts: list[ExtractedText]
-    associations: list[dict]
+    associations: list[dict[str, object]]
     image_width: int
     image_height: int
 
@@ -82,7 +82,8 @@ class InferenceService:
             import sys
             sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "ml" / "training"))
             from symbol_classes import get_class_names
-            return ["__background__"] + get_class_names()
+            class_names: list[str] = get_class_names()
+            return ["__background__"] + class_names
         except ImportError:
             logger.warning("Could not load symbol classes, using placeholders")
             return ["__background__"] + [f"class_{i}" for i in range(50)]
@@ -95,8 +96,8 @@ class InferenceService:
             from model import SymbolDetector
 
             self.symbol_model = SymbolDetector.load(path, device=self.device)
-            self.symbol_model.to(self.device)
-            self.symbol_model.eval()
+            self.symbol_model.to(self.device)  # type: ignore[attr-defined]
+            self.symbol_model.eval()  # type: ignore[attr-defined]
             logger.info(f"Loaded model from {path}")
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
@@ -196,7 +197,7 @@ class InferenceService:
             logger.error(f"Symbol detection failed: {e}")
             return []
 
-    def analyze_bytes(self, image_bytes: bytes) -> dict:
+    def analyze_bytes(self, image_bytes: bytes) -> dict[str, object]:
         """
         Analyze image bytes and return JSON-serializable result.
 

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import ezdxf
 from ezdxf import units
@@ -164,6 +164,7 @@ class DXFExportService:
         self._create_layers()
 
         # Create symbol block library
+        assert self.doc is not None  # Set by _initialize_document
         self.block_library = ISO10628BlockLibrary(self.doc)
 
         # Get paper dimensions for scaling
@@ -226,10 +227,12 @@ class DXFExportService:
                 # Layer already exists
                 layer = self.doc.layers.get(name)
                 layer.color = color
-                layer.linetype = linetype  # type: ignore[union-attr]
+                layer.linetype = linetype  # type: ignore[attr-defined]
 
     def _place_symbols(self, symbols: list["Symbol"], options: ExportOptions) -> None:
         """Place symbol blocks in the drawing."""
+        assert self.msp is not None  # Set by _initialize_document
+        assert self.block_library is not None  # Set by export_drawing
         for symbol in symbols:
             if symbol.is_deleted:
                 continue
@@ -271,6 +274,7 @@ class DXFExportService:
 
     def _draw_lines(self, lines: list["Line"], options: ExportOptions) -> None:
         """Draw piping lines."""
+        assert self.msp is not None  # Set by _initialize_document
         for line in lines:
             if line.is_deleted:
                 continue
@@ -319,6 +323,7 @@ class DXFExportService:
 
     def _add_text_annotations(self, annotations: list["TextAnnotation"]) -> None:
         """Add text annotations to the drawing."""
+        assert self.msp is not None  # Set by _initialize_document
         for annotation in annotations:
             if annotation.is_deleted:
                 continue
@@ -345,6 +350,7 @@ class DXFExportService:
 
     def _add_title_block(self, title_info: TitleBlockInfo, options: ExportOptions) -> None:
         """Add title block to the drawing."""
+        assert self.msp is not None  # Set by _initialize_document
         paper_width, paper_height = PAPER_DIMENSIONS[options.paper_size]
 
         # Title block position (bottom right)
@@ -487,6 +493,7 @@ class DXFExportService:
 
     def _add_border(self, options: ExportOptions) -> None:
         """Add drawing border."""
+        assert self.msp is not None  # Set by _initialize_document
         paper_width, paper_height = PAPER_DIMENSIONS[options.paper_size]
         margin = 10  # 10mm margin
 
@@ -506,6 +513,7 @@ class DXFExportService:
 
     def _save_file(self, drawing_id: uuid.UUID, options: ExportOptions) -> Path:
         """Save the DXF file."""
+        assert self.doc is not None  # Set by _initialize_document
         # Create temp directory if needed
         output_dir = Path(tempfile.gettempdir()) / "flowex_exports"
         output_dir.mkdir(parents=True, exist_ok=True)

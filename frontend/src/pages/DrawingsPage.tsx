@@ -55,13 +55,13 @@ export function DrawingsPage() {
     async function fetchDrawings() {
       try {
         // First fetch all projects, then get drawings for each
-        const projectsResponse = await fetch(`${apiUrl}/api/projects`)
+        const projectsResponse = await fetch(`${apiUrl}/api/v1/projects/`)
         if (projectsResponse.ok) {
           const projects = await projectsResponse.json()
           const allDrawings: Drawing[] = []
 
           for (const project of projects) {
-            const drawingsResponse = await fetch(`${apiUrl}/api/drawings/project/${project.id}`)
+            const drawingsResponse = await fetch(`${apiUrl}/api/v1/drawings/project/${project.id}`)
             if (drawingsResponse.ok) {
               const projectDrawings = await drawingsResponse.json()
               for (const d of projectDrawings) {

@@ -34,7 +34,8 @@ def get_secrets_from_aws(secret_name: str, region: str = "eu-west-1") -> dict[st
         response = client.get_secret_value(SecretId=secret_name)
 
         if "SecretString" in response:
-            return json.loads(response["SecretString"])
+            result: dict[str, Any] = json.loads(response["SecretString"])
+            return result
         return {}
     except ImportError:
         # boto3 not installed (likely dev environment)
@@ -203,9 +204,10 @@ class Settings(BaseSettings):
         Returns:
             Dictionary with health status of each dependency.
         """
-        health = {
+        checks: dict[str, dict[str, str]] = {}
+        health: dict[str, Any] = {
             "status": "healthy",
-            "checks": {}
+            "checks": checks
         }
 
         # Check database connection
@@ -222,7 +224,7 @@ class Settings(BaseSettings):
         # Check Redis connection
         try:
             import redis
-            r = redis.from_url(self.REDIS_URL)
+            r = redis.from_url(self.REDIS_URL)  # type: ignore[no-untyped-call]
             r.ping()
             health["checks"]["redis"] = {"status": "healthy"}
         except Exception as e:

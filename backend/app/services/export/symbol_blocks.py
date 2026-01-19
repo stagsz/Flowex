@@ -1,5 +1,6 @@
 """ISO 10628 symbol block definitions for DXF export."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -94,7 +95,7 @@ class ISO10628BlockLibrary:
         """Normalize symbol class to valid DXF block name."""
         return symbol_class.upper().replace(" ", "_")
 
-    def _get_block_creator(self, symbol_class: str):
+    def _get_block_creator(self, symbol_class: str) -> Callable[[str], None] | None:
         """Get the block creator method for a symbol class."""
         creators = {
             # Equipment symbols

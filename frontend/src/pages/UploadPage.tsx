@@ -48,7 +48,7 @@ export function UploadPage() {
   useEffect(() => {
     async function fetchProjects() {
       try {
-        const response = await fetch(`${apiUrl}/api/projects`)
+        const response = await fetch(`${apiUrl}/api/v1/projects/`)
         if (response.ok) {
           const data = await response.json()
           setProjects(data.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name })))
@@ -143,7 +143,7 @@ export function UploadPage() {
 
         // Upload to backend API
         const response = await fetch(
-          `${apiUrl}/api/drawings/upload/${selectedProject}`,
+          `${apiUrl}/api/v1/drawings/upload/${selectedProject}`,
           {
             method: "POST",
             body: formData,
