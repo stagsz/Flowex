@@ -1,13 +1,6 @@
 import { useState } from "react"
 import { useParams, Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import {
@@ -23,7 +16,6 @@ import {
   CheckCircle,
   AlertTriangle,
   Filter,
-  Layers,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -45,7 +37,7 @@ export function ValidationPage() {
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterType, setFilterType] = useState("all")
-  const [showLowConfidence, setShowLowConfidence] = useState(true)
+  const [showLowConfidence] = useState(true)
 
   // Mock data - would come from API
   const drawing = {

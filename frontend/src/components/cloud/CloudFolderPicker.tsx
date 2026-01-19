@@ -36,7 +36,7 @@ export function CloudFolderPicker({
 
   const [newFolderName, setNewFolderName] = useState("")
   const [showNewFolder, setShowNewFolder] = useState(false)
-  const [selectedFolder, setSelectedFolder] = useState<CloudFolder | null>(null)
+  const [, setSelectedFolder] = useState<CloudFolder | null>(null)
 
   useEffect(() => {
     if (open && connection) {

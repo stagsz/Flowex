@@ -98,9 +98,7 @@ test.describe('Upload Page', () => {
   test('should display file upload icon', async ({ page }) => {
     await page.goto('/upload')
 
-    // The FileUp icon should be visible in the drop zone
-    const uploadIcon = page.locator('svg').filter({ has: page.locator('[d*="M21 15v4"]') }).first()
-    // Alternative: just check the drop zone content is present
+    // Check the drop zone content is present (FileUp icon text)
     await expect(page.getByText(/drop pdf files here/i)).toBeVisible()
   })
 })

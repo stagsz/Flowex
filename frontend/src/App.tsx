@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { MainLayout } from "@/components/layout"
 import {
@@ -13,9 +14,16 @@ import {
 import { useAuthStore } from "@/stores/authStore"
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuthStore()
+  const { user, token, isLoading, checkAuth } = useAuthStore()
 
-  if (isLoading) {
+  useEffect(() => {
+    // If we have a token but no user, verify the token
+    if (token && !user && !isLoading) {
+      checkAuth()
+    }
+  }, [token, user, isLoading, checkAuth])
+
+  if (isLoading || (token && !user)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />

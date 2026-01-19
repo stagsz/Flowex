@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test'
-import { mockUser } from './fixtures'
 
 /**
  * Helper to set up authenticated state for tests.

@@ -195,12 +195,7 @@ test.describe('Validation Interface', () => {
     // Initial zoom is 100%
     await expect(page.getByText('100%')).toBeVisible()
 
-    // Click zoom in
-    const zoomInButton = page.locator('button').filter({ has: page.locator('[d*="circle"]') }).or(
-      page.locator('button').filter({ hasText: '' }).nth(2)
-    )
-
-    // We'll check that the zoom control text is present
+    // We verify zoom controls are present by checking the zoom level text
     await expect(page.getByText('100%')).toBeVisible()
   })
 })

@@ -38,12 +38,12 @@ test.describe('Authentication Flow', () => {
 
   test('should redirect root path to dashboard for authenticated users', async ({ page }) => {
     // Set up authentication state
-    await page.addInitScript((user) => {
+    await page.addInitScript(() => {
       localStorage.setItem('flowex-auth', JSON.stringify({
         state: { token: 'mock-jwt-token' },
         version: 0,
       }))
-    }, mockUser)
+    })
 
     // Mock the auth check endpoint
     await page.route('**/api/auth/me', async (route) => {

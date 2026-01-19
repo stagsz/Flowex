@@ -141,7 +141,7 @@ export function CloudFilePicker({
             >
               Root
             </button>
-            {folderHistory.map((folder, index) => (
+            {folderHistory.map((folder) => (
               <span key={folder.id} className="flex items-center gap-2">
                 <span>/</span>
                 <button

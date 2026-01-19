@@ -20,7 +20,7 @@ export const test = base.extend<{
 }>({
   authenticatedPage: async ({ page }, use) => {
     // Set up authentication state in localStorage before navigating
-    await page.addInitScript((user) => {
+    await page.addInitScript(() => {
       const authState = {
         state: {
           token: 'mock-jwt-token',
@@ -28,7 +28,7 @@ export const test = base.extend<{
         version: 0,
       }
       localStorage.setItem('flowex-auth', JSON.stringify(authState))
-    }, mockUser)
+    })
 
     // Mock the /api/auth/me endpoint to return the mock user
     await page.route('**/api/auth/me', async (route) => {
