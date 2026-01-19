@@ -8,7 +8,7 @@
 
 ## Current Focus
 
-**Phase 1: Foundation Setup** - Establish project infrastructure, database, and authentication before implementing features.
+**Phase 2: Core Backend Services** - File upload and PDF processing pipeline.
 
 ---
 
@@ -41,6 +41,7 @@
 - [x] Create authentication dependencies (get_current_user)
 - [x] Implement OAuth login flow (/auth/login)
 - [x] Implement OAuth callback handler (/auth/callback)
+- [x] Implement token refresh endpoint (/auth/refresh) - `86e24f4`
 - [x] Implement logout endpoint (/auth/logout)
 - [x] Implement user info endpoint (/auth/me)
 - [x] Implement role-based access control (RoleChecker)
