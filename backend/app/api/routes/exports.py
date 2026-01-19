@@ -1,7 +1,6 @@
 """Export API routes for DXF and data list generation."""
 
 import logging
-from enum import Enum
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
@@ -17,7 +16,6 @@ from app.services.export.data_lists import (
     DataListExportService,
     ExportFormat,
     ExportMetadata,
-    ListType,
 )
 from app.services.export.dxf_export import (
     DXFExportService,

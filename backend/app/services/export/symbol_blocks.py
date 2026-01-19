@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from typing import Any
 
-import ezdxf
 from ezdxf.document import Drawing as DXFDocument
 
 

@@ -243,7 +243,7 @@ class DXFExportService:
             layer = LayerConfig.get_layer_for_symbol(symbol.category.value)
 
             # Insert block reference
-            block_ref = self.msp.add_blockref(
+            self.msp.add_blockref(
                 block_name,
                 insert=(x, y),
                 dxfattribs={

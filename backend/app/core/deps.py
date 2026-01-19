@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Generator
 from typing import Annotated
 from uuid import UUID
@@ -6,9 +7,12 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.security import TokenPayload, verify_token
 from app.models import User, UserRole
+
+logger = logging.getLogger(__name__)
 
 # Security scheme
 security = HTTPBearer()
@@ -30,9 +34,13 @@ async def get_token_payload(
     try:
         return await verify_token(credentials.credentials)
     except ValueError as e:
+        # Log full error details for debugging
+        logger.warning(f"Token verification failed: {e}")
+        # In production, use generic error message to avoid leaking implementation details
+        detail = str(e) if settings.DEBUG else "Invalid or expired token"
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
+            detail=detail,
             headers={"WWW-Authenticate": "Bearer"},
         ) from e
 

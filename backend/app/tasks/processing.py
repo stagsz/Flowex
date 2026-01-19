@@ -1,7 +1,7 @@
 import logging
+from datetime import UTC, datetime
 from uuid import UUID
 
-from celery import shared_task
 from sqlalchemy.orm import Session
 
 from app.core.celery_app import celery_app
@@ -51,9 +51,7 @@ def process_drawing(self, drawing_id: str) -> dict:
 
         # Update status to processing
         drawing.status = DrawingStatus.PROCESSING
-        from datetime import datetime, timezone
-
-        drawing.processing_started_at = datetime.now(timezone.utc)
+        drawing.processing_started_at = datetime.now(UTC)
         db.commit()
 
         logger.info(f"Starting processing for drawing {drawing_id}")
@@ -110,7 +108,7 @@ def process_drawing(self, drawing_id: str) -> dict:
 
         # Update drawing status to review (ready for AI processing)
         drawing.status = DrawingStatus.REVIEW
-        drawing.processing_completed_at = datetime.now(timezone.utc)
+        drawing.processing_completed_at = datetime.now(UTC)
         db.commit()
 
         result = {

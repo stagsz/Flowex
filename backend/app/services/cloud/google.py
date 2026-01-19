@@ -328,7 +328,6 @@ class GoogleDriveProvider(CloudStorageProvider):
         mime_type: str,
     ) -> CloudFile:
         """Resumable upload for large files."""
-        import json
 
         metadata = {
             "name": filename,

@@ -12,7 +12,7 @@ from pathlib import Path
 import torch
 from PIL import Image
 
-from app.ml.ocr_pipeline import ExtractedText, OCRPipeline, TagAssociator, get_ocr_pipeline
+from app.ml.ocr_pipeline import ExtractedText, TagAssociator, get_ocr_pipeline
 
 logger = logging.getLogger(__name__)
 

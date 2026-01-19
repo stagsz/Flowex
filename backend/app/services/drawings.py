@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -128,9 +128,9 @@ async def update_drawing_status(
     drawing.error_message = error_message
 
     if status == DrawingStatus.PROCESSING:
-        drawing.processing_started_at = datetime.now(timezone.utc)
+        drawing.processing_started_at = datetime.now(UTC)
     elif status in [DrawingStatus.REVIEW, DrawingStatus.COMPLETE, DrawingStatus.ERROR]:
-        drawing.processing_completed_at = datetime.now(timezone.utc)
+        drawing.processing_completed_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(drawing)

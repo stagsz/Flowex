@@ -1,10 +1,8 @@
 """Data list export service for P&ID drawings (Excel, CSV, PDF)."""
 
 import csv
-import io
 import logging
 import tempfile
-import uuid
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -15,7 +13,6 @@ from typing import TYPE_CHECKING, Any
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
-from openpyxl.worksheet.worksheet import Worksheet
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet

@@ -1,12 +1,12 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
-from app.models import Drawing, DrawingStatus, Project, User
+from app.models import DrawingStatus, Project, User
 from app.services import drawings as drawing_service
 from app.services.drawings import FileValidationError
 

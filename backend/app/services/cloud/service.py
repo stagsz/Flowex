@@ -2,7 +2,7 @@
 
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,7 +61,7 @@ class CloudStorageService:
             "user_id": str(user_id),
             "org_id": str(org_id),
             "provider": provider,
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
         }
         return state
 
@@ -74,7 +74,7 @@ class CloudStorageService:
 
         # Check if state is expired (5 minutes)
         created_at = state_data["created_at"]
-        if datetime.now(timezone.utc) - created_at > timedelta(minutes=5):
+        if datetime.now(UTC) - created_at > timedelta(minutes=5):
             return None
 
         return state_data
@@ -117,7 +117,7 @@ class CloudStorageService:
             account_name=user_info.name,
             access_token_encrypted=TokenEncryption.encrypt(tokens.access_token),
             refresh_token_encrypted=TokenEncryption.encrypt(tokens.refresh_token),
-            token_expires_at=datetime.now(timezone.utc)
+            token_expires_at=datetime.now(UTC)
             + timedelta(seconds=tokens.expires_in),
         )
 
@@ -172,7 +172,7 @@ class CloudStorageService:
     async def _get_valid_access_token(self, connection: CloudConnection) -> str:
         """Get a valid access token, refreshing if needed."""
         # Check if token expires within 5 minutes
-        if connection.token_expires_at < datetime.now(timezone.utc) + timedelta(
+        if connection.token_expires_at < datetime.now(UTC) + timedelta(
             minutes=5
         ):
             await self._refresh_connection_token(connection)
@@ -191,7 +191,7 @@ class CloudStorageService:
             connection.refresh_token_encrypted = TokenEncryption.encrypt(
                 tokens.refresh_token
             )
-        connection.token_expires_at = datetime.now(timezone.utc) + timedelta(
+        connection.token_expires_at = datetime.now(UTC) + timedelta(
             seconds=tokens.expires_in
         )
 
@@ -199,7 +199,7 @@ class CloudStorageService:
 
     async def _update_last_used(self, connection: CloudConnection) -> None:
         """Update the last_used_at timestamp."""
-        connection.last_used_at = datetime.now(timezone.utc)
+        connection.last_used_at = datetime.now(UTC)
         await self.db.commit()
 
     async def browse(

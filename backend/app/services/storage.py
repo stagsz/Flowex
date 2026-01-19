@@ -9,11 +9,9 @@ Supports:
 The provider is selected via STORAGE_PROVIDER environment variable.
 """
 
-import io
-import os
 import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO
 
@@ -78,7 +76,7 @@ class BaseStorageService(ABC):
 
     def _generate_base_path(self, organization_id: uuid.UUID, filename: str) -> str:
         """Generate a standard path structure."""
-        timestamp = datetime.now(timezone.utc).strftime("%Y/%m/%d")
+        timestamp = datetime.now(UTC).strftime("%Y/%m/%d")
         file_id = uuid.uuid4().hex[:12]
         safe_filename = self._sanitize_filename(filename)
         return f"organizations/{organization_id}/{timestamp}/{file_id}_{safe_filename}"
@@ -207,7 +205,7 @@ class SupabaseStorageService(BaseStorageService):
                         "allowed_mime_types": ["application/pdf", "image/png", "image/jpeg"],
                     },
                 )
-        except Exception as e:
+        except Exception:
             # Bucket might already exist or we don't have permission to create
             pass
 
@@ -227,7 +225,7 @@ class SupabaseStorageService(BaseStorageService):
             file_content = file.read()
 
             # Upload to Supabase Storage
-            result = self.client.storage.from_(self.bucket).upload(
+            self.client.storage.from_(self.bucket).upload(
                 path=storage_path,
                 file=file_content,
                 file_options={"content-type": content_type},

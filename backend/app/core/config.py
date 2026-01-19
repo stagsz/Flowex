@@ -1,6 +1,7 @@
 from enum import Enum
-from typing import Literal
+from typing import Self
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -95,6 +96,26 @@ class Settings(BaseSettings):
     def google_token_url(self) -> str:
         """Google OAuth2 token endpoint."""
         return "https://oauth2.googleapis.com/token"
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> Self:
+        """Validate that production secrets are properly configured when not in DEBUG mode."""
+        if not self.DEBUG:
+            # Check JWT secret is not the default development value
+            if self.JWT_SECRET_KEY == "dev-secret-key-change-in-production":
+                raise ValueError(
+                    "JWT_SECRET_KEY must be changed from default value in production. "
+                    "Set DEBUG=true for development or provide a secure secret key."
+                )
+
+            # Check token encryption key is set for cloud integrations
+            if (self.MICROSOFT_CLIENT_ID or self.GOOGLE_CLIENT_ID) and not self.TOKEN_ENCRYPTION_KEY:
+                raise ValueError(
+                    "TOKEN_ENCRYPTION_KEY must be set when cloud integrations are configured. "
+                    "Generate with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+                )
+
+        return self
 
     class Config:
         env_file = ".env"
