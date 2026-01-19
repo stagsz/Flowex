@@ -62,3 +62,10 @@ temp/
 
 # Uploads (local dev)
 uploads/
+
+# images
+images/*.png
+images/*.jpg
+images/*.jpeg
+images/*.gif
+images/*.svg

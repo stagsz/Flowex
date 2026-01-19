@@ -81,17 +81,30 @@ while true; do
     # -p: headless mode (non-interactive)
     # --dangerously-skip-permissions: bypass permission prompts for automation
     # --model: specify model (opus for complex tasks, sonnet for speed)
-    
-    cat "$PROMPT_FILE" | claude -p \
+
+    LOG_FILE="ralph_log_$(date '+%Y%m%d').txt"
+    TEMP_OUTPUT=$(mktemp)
+
+    echo "Starting Claude at $(date '+%H:%M:%S')..." | tee -a "$LOG_FILE"
+
+    # Run Claude with prompt from stdin (handles long prompts correctly)
+    claude -p \
         --dangerously-skip-permissions \
         --model "$DEFAULT_MODEL" \
         --verbose \
-        2>&1 | tee -a "ralph_log_$(date '+%Y%m%d').txt"
-    
+        < "$PROMPT_FILE" > "$TEMP_OUTPUT" 2>&1
+
     EXIT_CODE=$?
-    
+
+    # Display and log output
+    cat "$TEMP_OUTPUT" | tee -a "$LOG_FILE"
+    rm -f "$TEMP_OUTPUT"
+
+    echo "Claude finished at $(date '+%H:%M:%S') with exit code $EXIT_CODE" | tee -a "$LOG_FILE"
+
     if [ $EXIT_CODE -ne 0 ]; then
         echo -e "${RED}Claude exited with code $EXIT_CODE${NC}"
+        echo "Check $LOG_FILE for details"
         echo "Continuing to next iteration in 5 seconds..."
         sleep 5
     fi
