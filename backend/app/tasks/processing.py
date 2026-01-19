@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.celery_app import celery_app
 from app.core.database import SessionLocal
-from app.models import Drawing, DrawingStatus, FileType
+from app.models import Drawing, DrawingStatus, FileType, Symbol, SymbolCategory, TextAnnotation
 from app.services.pdf_processing import (
     PDFProcessingError,
     create_image_tiles,
@@ -21,6 +21,33 @@ from app.services.pdf_processing import (
 from app.services.storage import get_storage_service
 
 logger = logging.getLogger(__name__)
+
+
+def _map_class_to_category(class_name: str) -> SymbolCategory:
+    """Map symbol class name to SymbolCategory enum."""
+    class_name_lower = class_name.lower()
+
+    # Equipment patterns
+    if any(kw in class_name_lower for kw in [
+        "pump", "compressor", "vessel", "tank", "reactor", "exchanger",
+        "heater", "cooler", "column", "separator", "filter", "blower", "fan"
+    ]):
+        return SymbolCategory.EQUIPMENT
+
+    # Instrument patterns
+    if any(kw in class_name_lower for kw in [
+        "indicator", "transmitter", "controller", "recorder", "gauge",
+        "sensor", "flow", "level", "pressure", "temperature"
+    ]) or class_name_lower.startswith(("pt", "ft", "lt", "tt", "pi", "fi", "li", "ti")):
+        return SymbolCategory.INSTRUMENT
+
+    # Valve patterns
+    if any(kw in class_name_lower for kw in [
+        "valve", "gate", "globe", "ball", "check", "butterfly", "control"
+    ]):
+        return SymbolCategory.VALVE
+
+    return SymbolCategory.OTHER
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)  # type: ignore[misc]
@@ -102,7 +129,71 @@ def process_drawing(self: Any, drawing_id: str) -> dict[str, Any]:
             img_path = f"{base_path}/processed/page_{i + 1}.png"
             asyncio.run(storage.upload_file(BytesIO(img_bytes), img_path, "image/png"))
 
-        # Update drawing status to review (ready for AI processing)
+        # Run AI inference on processed images
+        logger.info(f"Running AI inference for drawing {drawing_id}")
+        total_symbols = 0
+        total_texts = 0
+
+        try:
+            from app.ml.inference import get_inference_service
+
+            inference_service = get_inference_service()
+
+            # Process each page
+            for page_idx, img_bytes in enumerate(processed_images):
+                analysis = inference_service.analyze_image(img_bytes)
+
+                # Store detected symbols
+                for detected in analysis.symbols:
+                    symbol = Symbol(
+                        drawing_id=drawing.id,
+                        symbol_class=detected.class_name,
+                        category=_map_class_to_category(detected.class_name),
+                        tag_number=detected.tag,
+                        bbox_x=detected.bbox[0],
+                        bbox_y=detected.bbox[1],
+                        bbox_width=detected.bbox[2],
+                        bbox_height=detected.bbox[3],
+                        confidence=detected.confidence,
+                        is_verified=False,
+                        is_deleted=False,
+                    )
+                    db.add(symbol)
+                    total_symbols += 1
+
+                # Store detected text annotations
+                for text in analysis.texts:
+                    annotation = TextAnnotation(
+                        drawing_id=drawing.id,
+                        text_content=text.text,
+                        bbox_x=text.bbox[0],
+                        bbox_y=text.bbox[1],
+                        bbox_width=text.bbox[2],
+                        bbox_height=text.bbox[3],
+                        rotation=text.rotation,
+                        confidence=text.confidence,
+                        is_verified=False,
+                        is_deleted=False,
+                    )
+                    db.add(annotation)
+                    total_texts += 1
+
+                logger.info(
+                    f"Page {page_idx + 1}: detected {len(analysis.symbols)} symbols, "
+                    f"{len(analysis.texts)} texts"
+                )
+
+            db.commit()
+            logger.info(
+                f"Stored {total_symbols} symbols and {total_texts} texts for drawing {drawing_id}"
+            )
+
+        except Exception as e:
+            logger.warning(f"AI inference failed for {drawing_id}: {e}. Continuing with manual review.")
+            # Don't fail the entire task if AI inference fails
+            # The drawing will still be in REVIEW status for manual annotation
+
+        # Update drawing status to review (ready for validation)
         drawing.status = DrawingStatus.REVIEW
         drawing.processing_completed_at = datetime.now(UTC)
         db.commit()
@@ -113,6 +204,8 @@ def process_drawing(self: Any, drawing_id: str) -> dict[str, Any]:
             "pdf_type": pdf_type,
             "page_count": len(images),
             "total_tiles": len(all_tiles),
+            "total_symbols": total_symbols,
+            "total_texts": total_texts,
             "metadata": metadata,
         }
 

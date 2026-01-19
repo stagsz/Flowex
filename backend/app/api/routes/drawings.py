@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
-from app.models import DrawingStatus, Project, User
+from app.models import DrawingStatus, Project, Symbol, TextAnnotation, User
 from app.services import drawings as drawing_service
 from app.services.drawings import FileValidationError
 
@@ -251,7 +251,7 @@ async def get_processing_status(
     drawing_id: UUID,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
-) -> dict:
+) -> dict[str, str | None]:
     """Get the processing status of a drawing."""
     drawing = await drawing_service.get_drawing(db, drawing_id)
     if not drawing:
@@ -276,3 +276,308 @@ async def get_processing_status(
             else None
         ),
     }
+
+
+# Symbol response models
+class SymbolResponse(BaseModel):
+    id: str
+    symbol_class: str
+    category: str
+    tag_number: str | None
+    bbox_x: float
+    bbox_y: float
+    bbox_width: float
+    bbox_height: float
+    confidence: float | None
+    is_verified: bool
+
+    class Config:
+        from_attributes = True
+
+
+class TextAnnotationResponse(BaseModel):
+    id: str
+    text_content: str
+    bbox_x: float
+    bbox_y: float
+    bbox_width: float
+    bbox_height: float
+    rotation: int
+    confidence: float | None
+    is_verified: bool
+    associated_symbol_id: str | None
+
+    class Config:
+        from_attributes = True
+
+
+class SymbolsAndTextsResponse(BaseModel):
+    symbols: list[SymbolResponse]
+    texts: list[TextAnnotationResponse]
+    summary: dict[str, int]
+
+
+class SymbolUpdateRequest(BaseModel):
+    tag_number: str | None = None
+    symbol_class: str | None = None
+    is_verified: bool | None = None
+
+
+class TextUpdateRequest(BaseModel):
+    text_content: str | None = None
+    is_verified: bool | None = None
+
+
+@router.get("/{drawing_id}/symbols", response_model=SymbolsAndTextsResponse)
+async def get_drawing_symbols(
+    drawing_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    include_deleted: bool = False,
+) -> SymbolsAndTextsResponse:
+    """Get all detected symbols and text annotations for a drawing."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get symbols
+    symbols_query = db.query(Symbol).filter(Symbol.drawing_id == drawing_id)
+    if not include_deleted:
+        symbols_query = symbols_query.filter(Symbol.is_deleted == False)  # noqa: E712
+    symbols = symbols_query.order_by(Symbol.created_at).all()
+
+    # Get text annotations
+    texts_query = db.query(TextAnnotation).filter(TextAnnotation.drawing_id == drawing_id)
+    if not include_deleted:
+        texts_query = texts_query.filter(TextAnnotation.is_deleted == False)  # noqa: E712
+    texts = texts_query.order_by(TextAnnotation.created_at).all()
+
+    # Build response
+    symbol_responses = [
+        SymbolResponse(
+            id=str(s.id),
+            symbol_class=s.symbol_class,
+            category=s.category.value,
+            tag_number=s.tag_number,
+            bbox_x=s.bbox_x,
+            bbox_y=s.bbox_y,
+            bbox_width=s.bbox_width,
+            bbox_height=s.bbox_height,
+            confidence=s.confidence,
+            is_verified=s.is_verified,
+        )
+        for s in symbols
+    ]
+
+    text_responses = [
+        TextAnnotationResponse(
+            id=str(t.id),
+            text_content=t.text_content,
+            bbox_x=t.bbox_x,
+            bbox_y=t.bbox_y,
+            bbox_width=t.bbox_width,
+            bbox_height=t.bbox_height,
+            rotation=t.rotation,
+            confidence=t.confidence,
+            is_verified=t.is_verified,
+            associated_symbol_id=str(t.associated_symbol_id) if t.associated_symbol_id else None,
+        )
+        for t in texts
+    ]
+
+    # Summary stats
+    verified_symbols = sum(1 for s in symbols if s.is_verified)
+    low_confidence_symbols = sum(1 for s in symbols if s.confidence and s.confidence < 0.85)
+
+    return SymbolsAndTextsResponse(
+        symbols=symbol_responses,
+        texts=text_responses,
+        summary={
+            "total_symbols": len(symbols),
+            "verified_symbols": verified_symbols,
+            "low_confidence_symbols": low_confidence_symbols,
+            "total_texts": len(texts),
+            "verified_texts": sum(1 for t in texts if t.is_verified),
+        },
+    )
+
+
+@router.patch("/{drawing_id}/symbols/{symbol_id}", response_model=SymbolResponse)
+async def update_symbol(
+    drawing_id: UUID,
+    symbol_id: UUID,
+    update: SymbolUpdateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> SymbolResponse:
+    """Update a symbol's tag, class, or verification status."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get symbol
+    symbol = db.query(Symbol).filter(
+        Symbol.id == symbol_id,
+        Symbol.drawing_id == drawing_id,
+    ).first()
+    if not symbol:
+        raise HTTPException(status_code=404, detail="Symbol not found")
+
+    # Update fields
+    if update.tag_number is not None:
+        symbol.tag_number = update.tag_number
+    if update.symbol_class is not None:
+        symbol.symbol_class = update.symbol_class
+    if update.is_verified is not None:
+        symbol.is_verified = update.is_verified
+
+    db.commit()
+    db.refresh(symbol)
+
+    return SymbolResponse(
+        id=str(symbol.id),
+        symbol_class=symbol.symbol_class,
+        category=symbol.category.value,
+        tag_number=symbol.tag_number,
+        bbox_x=symbol.bbox_x,
+        bbox_y=symbol.bbox_y,
+        bbox_width=symbol.bbox_width,
+        bbox_height=symbol.bbox_height,
+        confidence=symbol.confidence,
+        is_verified=symbol.is_verified,
+    )
+
+
+@router.delete("/{drawing_id}/symbols/{symbol_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_symbol(
+    drawing_id: UUID,
+    symbol_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    hard_delete: bool = False,
+) -> None:
+    """Soft-delete a symbol (or hard delete if specified)."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get symbol
+    symbol = db.query(Symbol).filter(
+        Symbol.id == symbol_id,
+        Symbol.drawing_id == drawing_id,
+    ).first()
+    if not symbol:
+        raise HTTPException(status_code=404, detail="Symbol not found")
+
+    if hard_delete:
+        db.delete(symbol)
+    else:
+        symbol.is_deleted = True
+    db.commit()
+
+
+@router.patch("/{drawing_id}/texts/{text_id}", response_model=TextAnnotationResponse)
+async def update_text_annotation(
+    drawing_id: UUID,
+    text_id: UUID,
+    update: TextUpdateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TextAnnotationResponse:
+    """Update a text annotation's content or verification status."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get text annotation
+    text = db.query(TextAnnotation).filter(
+        TextAnnotation.id == text_id,
+        TextAnnotation.drawing_id == drawing_id,
+    ).first()
+    if not text:
+        raise HTTPException(status_code=404, detail="Text annotation not found")
+
+    # Update fields
+    if update.text_content is not None:
+        text.text_content = update.text_content
+    if update.is_verified is not None:
+        text.is_verified = update.is_verified
+
+    db.commit()
+    db.refresh(text)
+
+    return TextAnnotationResponse(
+        id=str(text.id),
+        text_content=text.text_content,
+        bbox_x=text.bbox_x,
+        bbox_y=text.bbox_y,
+        bbox_width=text.bbox_width,
+        bbox_height=text.bbox_height,
+        rotation=text.rotation,
+        confidence=text.confidence,
+        is_verified=text.is_verified,
+        associated_symbol_id=str(text.associated_symbol_id) if text.associated_symbol_id else None,
+    )
+
+
+@router.post("/{drawing_id}/symbols/{symbol_id}/verify", response_model=SymbolResponse)
+async def verify_symbol(
+    drawing_id: UUID,
+    symbol_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> SymbolResponse:
+    """Mark a symbol as verified."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get symbol
+    symbol = db.query(Symbol).filter(
+        Symbol.id == symbol_id,
+        Symbol.drawing_id == drawing_id,
+    ).first()
+    if not symbol:
+        raise HTTPException(status_code=404, detail="Symbol not found")
+
+    symbol.is_verified = True
+    db.commit()
+    db.refresh(symbol)
+
+    return SymbolResponse(
+        id=str(symbol.id),
+        symbol_class=symbol.symbol_class,
+        category=symbol.category.value,
+        tag_number=symbol.tag_number,
+        bbox_x=symbol.bbox_x,
+        bbox_y=symbol.bbox_y,
+        bbox_width=symbol.bbox_width,
+        bbox_height=symbol.bbox_height,
+        confidence=symbol.confidence,
+        is_verified=symbol.is_verified,
+    )

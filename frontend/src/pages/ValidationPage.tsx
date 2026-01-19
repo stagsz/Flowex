@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useParams, Link } from "react-router-dom"
 import { Document, Page, pdfjs } from "react-pdf"
 import "react-pdf/dist/Page/AnnotationLayer.css"
@@ -28,14 +28,23 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 
 interface DetectedSymbol {
   id: string
-  type: "equipment" | "instrument" | "valve" | "line"
+  type: "equipment" | "instrument" | "valve" | "other"
   tag: string
+  symbolClass: string
   confidence: number
   x: number
   y: number
   width: number
   height: number
   validated: boolean
+}
+
+interface SymbolSummary {
+  total_symbols: number
+  verified_symbols: number
+  low_confidence_symbols: number
+  total_texts: number
+  verified_texts: number
 }
 
 export function ValidationPage() {
@@ -51,30 +60,35 @@ export function ValidationPage() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [pdfLoading, setPdfLoading] = useState(true)
   const [pdfError, setPdfError] = useState<string | null>(null)
+  const [symbols, setSymbols] = useState<DetectedSymbol[]>([])
+  const [symbolsLoading, setSymbolsLoading] = useState(true)
+  const [summary, setSummary] = useState<SymbolSummary | null>(null)
+  const [editingTag, setEditingTag] = useState<string>("")
 
-  // Mock data - would come from API
-  const drawing = {
+  // Drawing info from API
+  const [drawing, setDrawing] = useState({
     id: drawingId,
-    name: "P&ID-001-Rev3.pdf",
-    projectName: "Refinery Unit A",
-  }
+    name: "Loading...",
+    projectName: "",
+  })
 
-  // Fetch PDF URL from backend API
+  const apiUrl = import.meta.env.VITE_API_URL || ''
+
+  // Fetch drawing details and PDF URL
   useEffect(() => {
-    async function fetchPdfUrl() {
+    async function fetchDrawing() {
       try {
         setPdfLoading(true)
         setPdfError(null)
-        // In production, this would fetch from the API:
-        // const response = await fetch(`/api/drawings/${drawingId}/pdf-url`)
-        // const data = await response.json()
-        // setPdfUrl(data.url)
 
-        // Fetch drawing details from backend API
-        const apiUrl = import.meta.env.VITE_API_URL || ''
         const response = await fetch(`${apiUrl}/api/v1/drawings/${drawingId}`)
         if (response.ok) {
           const data = await response.json()
+          setDrawing({
+            id: data.id,
+            name: data.original_filename,
+            projectName: `Project ${data.project_id.slice(0, 8)}...`,
+          })
           if (data.download_url) {
             setPdfUrl(data.download_url)
           } else {
@@ -95,9 +109,59 @@ export function ValidationPage() {
     }
 
     if (drawingId) {
-      fetchPdfUrl()
+      fetchDrawing()
     }
-  }, [drawingId])
+  }, [drawingId, apiUrl])
+
+  // Fetch symbols and text annotations
+  useEffect(() => {
+    async function fetchSymbols() {
+      try {
+        setSymbolsLoading(true)
+
+        const response = await fetch(`${apiUrl}/api/v1/drawings/${drawingId}/symbols`)
+        if (response.ok) {
+          const data = await response.json()
+
+          // Transform API response to DetectedSymbol format
+          const transformedSymbols: DetectedSymbol[] = data.symbols.map((s: {
+            id: string
+            category: string
+            tag_number: string | null
+            symbol_class: string
+            confidence: number | null
+            bbox_x: number
+            bbox_y: number
+            bbox_width: number
+            bbox_height: number
+            is_verified: boolean
+          }) => ({
+            id: s.id,
+            type: s.category as "equipment" | "instrument" | "valve" | "other",
+            tag: s.tag_number || s.symbol_class,
+            symbolClass: s.symbol_class,
+            confidence: s.confidence || 0,
+            x: s.bbox_x,
+            y: s.bbox_y,
+            width: s.bbox_width,
+            height: s.bbox_height,
+            validated: s.is_verified,
+          }))
+
+          setSymbols(transformedSymbols)
+          setSummary(data.summary)
+        }
+      } catch (err) {
+        console.error("Failed to fetch symbols:", err)
+      } finally {
+        setSymbolsLoading(false)
+      }
+    }
+
+    if (drawingId) {
+      fetchSymbols()
+    }
+  }, [drawingId, apiUrl])
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages)
@@ -109,16 +173,59 @@ export function ValidationPage() {
     setPdfLoading(false)
   }
 
-  const symbols: DetectedSymbol[] = [
-    { id: "1", type: "equipment", tag: "V-101", confidence: 0.98, x: 100, y: 150, width: 60, height: 80, validated: true },
-    { id: "2", type: "equipment", tag: "P-201", confidence: 0.95, x: 250, y: 200, width: 50, height: 50, validated: true },
-    { id: "3", type: "instrument", tag: "PT-101", confidence: 0.92, x: 180, y: 120, width: 30, height: 30, validated: false },
-    { id: "4", type: "instrument", tag: "FT-201", confidence: 0.88, x: 300, y: 180, width: 30, height: 30, validated: false },
-    { id: "5", type: "valve", tag: "XV-101", confidence: 0.75, x: 150, y: 250, width: 25, height: 25, validated: false },
-    { id: "6", type: "valve", tag: "HV-201", confidence: 0.68, x: 280, y: 300, width: 25, height: 25, validated: false },
-    { id: "7", type: "line", tag: '6"-P-101-A1', confidence: 0.91, x: 100, y: 100, width: 200, height: 10, validated: false },
-    { id: "8", type: "equipment", tag: "E-301", confidence: 0.96, x: 400, y: 150, width: 80, height: 60, validated: false },
-  ]
+  // Verify a symbol
+  const verifySymbol = useCallback(async (symbolId: string) => {
+    try {
+      const response = await fetch(
+        `${apiUrl}/api/v1/drawings/${drawingId}/symbols/${symbolId}/verify`,
+        { method: "POST" }
+      )
+      if (response.ok) {
+        setSymbols(prev =>
+          prev.map(s => s.id === symbolId ? { ...s, validated: true } : s)
+        )
+      }
+    } catch (err) {
+      console.error("Failed to verify symbol:", err)
+    }
+  }, [apiUrl, drawingId])
+
+  // Update symbol tag
+  const updateSymbolTag = useCallback(async (symbolId: string, newTag: string) => {
+    try {
+      const response = await fetch(
+        `${apiUrl}/api/v1/drawings/${drawingId}/symbols/${symbolId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tag_number: newTag }),
+        }
+      )
+      if (response.ok) {
+        setSymbols(prev =>
+          prev.map(s => s.id === symbolId ? { ...s, tag: newTag } : s)
+        )
+      }
+    } catch (err) {
+      console.error("Failed to update symbol:", err)
+    }
+  }, [apiUrl, drawingId])
+
+  // Delete symbol (soft delete)
+  const deleteSymbol = useCallback(async (symbolId: string) => {
+    try {
+      const response = await fetch(
+        `${apiUrl}/api/v1/drawings/${drawingId}/symbols/${symbolId}`,
+        { method: "DELETE" }
+      )
+      if (response.ok) {
+        setSymbols(prev => prev.filter(s => s.id !== symbolId))
+        setSelectedSymbol(null)
+      }
+    } catch (err) {
+      console.error("Failed to delete symbol:", err)
+    }
+  }, [apiUrl, drawingId])
 
   const filteredSymbols = symbols.filter((symbol) => {
     const matchesSearch = symbol.tag.toLowerCase().includes(searchQuery.toLowerCase())
@@ -127,16 +234,25 @@ export function ValidationPage() {
     return matchesSearch && matchesType && matchesConfidence
   })
 
-  const validatedCount = symbols.filter((s) => s.validated).length
-  const lowConfidenceCount = symbols.filter((s) => s.confidence < 0.85).length
-  const validationProgress = (validatedCount / symbols.length) * 100
+  const validatedCount = summary?.verified_symbols ?? symbols.filter((s) => s.validated).length
+  const lowConfidenceCount = summary?.low_confidence_symbols ?? symbols.filter((s) => s.confidence < 0.85).length
+  const totalSymbols = summary?.total_symbols ?? symbols.length
+  const validationProgress = totalSymbols > 0 ? (validatedCount / totalSymbols) * 100 : 0
 
-  const typeColors = {
+  const typeColors: Record<string, string> = {
     equipment: "bg-blue-500",
     instrument: "bg-green-500",
     valve: "bg-orange-500",
-    line: "bg-purple-500",
+    other: "bg-purple-500",
   }
+
+  // Set editing tag when symbol is selected
+  useEffect(() => {
+    if (selectedSymbol) {
+      const symbol = symbols.find(s => s.id === selectedSymbol)
+      setEditingTag(symbol?.tag || "")
+    }
+  }, [selectedSymbol, symbols])
 
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col">
@@ -271,7 +387,7 @@ export function ValidationPage() {
           <div className="p-3 border-b">
             <div className="flex items-center justify-between text-sm mb-1">
               <span>Validation Progress</span>
-              <span>{validatedCount}/{symbols.length}</span>
+              <span>{validatedCount}/{totalSymbols}</span>
             </div>
             <Progress value={validationProgress} className="h-2" />
             {lowConfidenceCount > 0 && (
@@ -296,7 +412,7 @@ export function ValidationPage() {
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-muted-foreground" />
               <div className="flex gap-1 flex-wrap">
-                {["all", "equipment", "instrument", "valve", "line"].map((type) => (
+                {["all", "equipment", "instrument", "valve", "other"].map((type) => (
                   <Button
                     key={type}
                     variant={filterType === type ? "secondary" : "ghost"}
@@ -313,6 +429,22 @@ export function ValidationPage() {
 
           {/* Symbol list */}
           <div className="flex-1 overflow-auto">
+            {symbolsLoading ? (
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-muted-foreground">Loading symbols...</span>
+              </div>
+            ) : symbols.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 text-muted-foreground">
+                <AlertTriangle className="h-8 w-8 mb-2" />
+                <p>No symbols detected</p>
+                <p className="text-xs mt-1">Process the drawing to detect symbols</p>
+              </div>
+            ) : filteredSymbols.length === 0 ? (
+              <div className="flex items-center justify-center p-8 text-muted-foreground">
+                <p>No symbols match the current filter</p>
+              </div>
+            ) : null}
             {filteredSymbols.map((symbol) => (
               <div
                 key={symbol.id}
@@ -365,17 +497,45 @@ export function ValidationPage() {
                 <div>
                   <label className="text-xs text-muted-foreground">Tag</label>
                   <Input
-                    value={symbols.find((s) => s.id === selectedSymbol)?.tag || ""}
+                    value={editingTag}
+                    onChange={(e) => setEditingTag(e.target.value)}
+                    onBlur={() => {
+                      const symbol = symbols.find(s => s.id === selectedSymbol)
+                      if (symbol && editingTag !== symbol.tag) {
+                        updateSymbolTag(selectedSymbol, editingTag)
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const symbol = symbols.find(s => s.id === selectedSymbol)
+                        if (symbol && editingTag !== symbol.tag) {
+                          updateSymbolTag(selectedSymbol, editingTag)
+                        }
+                      }
+                    }}
                     className="h-8"
                   />
                 </div>
+                <div className="text-xs text-muted-foreground mb-2">
+                  Class: {symbols.find(s => s.id === selectedSymbol)?.symbolClass}
+                </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => deleteSymbol(selectedSymbol)}
+                  >
                     Delete
                   </Button>
-                  <Button size="sm" className="flex-1">
+                  <Button
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => verifySymbol(selectedSymbol)}
+                    disabled={symbols.find(s => s.id === selectedSymbol)?.validated}
+                  >
                     <CheckCircle className="h-4 w-4 mr-1" />
-                    Validate
+                    {symbols.find(s => s.id === selectedSymbol)?.validated ? "Validated" : "Validate"}
                   </Button>
                 </div>
               </div>
