@@ -36,11 +36,12 @@ test.describe('Main Layout', () => {
   test('should display sidebar navigation', async ({ page }) => {
     await page.goto('/dashboard')
 
-    // Sidebar navigation items
-    await expect(page.getByRole('link', { name: /dashboard/i })).toBeVisible()
-    await expect(page.getByRole('link', { name: /projects/i })).toBeVisible()
-    await expect(page.getByRole('link', { name: /drawings/i })).toBeVisible()
-    await expect(page.getByRole('link', { name: /upload/i })).toBeVisible()
+    // Sidebar navigation items (scoped to aside element)
+    const sidebar = page.locator('aside')
+    await expect(sidebar.getByRole('link', { name: 'Dashboard' })).toBeVisible()
+    await expect(sidebar.getByRole('link', { name: 'Projects' })).toBeVisible()
+    await expect(sidebar.getByRole('link', { name: 'Drawings' })).toBeVisible()
+    await expect(sidebar.getByRole('link', { name: 'Upload' })).toBeVisible()
   })
 
   test('should display secondary navigation in sidebar', async ({ page }) => {
@@ -63,8 +64,9 @@ test.describe('Main Layout', () => {
   test('should highlight active navigation item', async ({ page }) => {
     await page.goto('/dashboard')
 
-    // Dashboard link should have active styling (bg-primary)
-    const dashboardLink = page.getByRole('link', { name: /dashboard/i })
+    // Dashboard link should have active styling (bg-primary) - scoped to sidebar
+    const sidebar = page.locator('aside')
+    const dashboardLink = sidebar.getByRole('link', { name: 'Dashboard' })
     await expect(dashboardLink).toHaveClass(/bg-primary/)
   })
 })
@@ -77,7 +79,8 @@ test.describe('Sidebar Navigation', () => {
   test('should navigate to Dashboard', async ({ page }) => {
     await page.goto('/projects')
 
-    await page.getByRole('link', { name: /dashboard/i }).click()
+    const sidebar = page.locator('aside')
+    await sidebar.getByRole('link', { name: 'Dashboard' }).click()
 
     await expect(page).toHaveURL('/dashboard')
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
@@ -86,7 +89,8 @@ test.describe('Sidebar Navigation', () => {
   test('should navigate to Projects', async ({ page }) => {
     await page.goto('/dashboard')
 
-    await page.getByRole('link', { name: /projects/i }).click()
+    const sidebar = page.locator('aside')
+    await sidebar.getByRole('link', { name: 'Projects' }).click()
 
     await expect(page).toHaveURL('/projects')
   })
@@ -94,7 +98,8 @@ test.describe('Sidebar Navigation', () => {
   test('should navigate to Drawings', async ({ page }) => {
     await page.goto('/dashboard')
 
-    await page.getByRole('link', { name: /drawings/i }).click()
+    const sidebar = page.locator('aside')
+    await sidebar.getByRole('link', { name: 'Drawings' }).click()
 
     await expect(page).toHaveURL('/drawings')
   })
@@ -102,7 +107,8 @@ test.describe('Sidebar Navigation', () => {
   test('should navigate to Upload', async ({ page }) => {
     await page.goto('/dashboard')
 
-    await page.getByRole('link', { name: /upload/i }).click()
+    const sidebar = page.locator('aside')
+    await sidebar.getByRole('link', { name: 'Upload' }).click()
 
     await expect(page).toHaveURL('/upload')
   })
@@ -110,9 +116,11 @@ test.describe('Sidebar Navigation', () => {
   test('should navigate to Settings', async ({ page }) => {
     await page.goto('/dashboard')
 
-    await page.getByRole('link', { name: /settings/i }).click()
+    const sidebar = page.locator('aside')
+    await sidebar.getByRole('link', { name: 'Settings' }).click()
 
-    await expect(page).toHaveURL('/settings')
+    // Settings links to /settings/integrations
+    await expect(page).toHaveURL('/settings/integrations')
   })
 })
 
@@ -124,20 +132,20 @@ test.describe('Header User Menu', () => {
   test('should open dropdown menu when clicking avatar', async ({ page }) => {
     await page.goto('/dashboard')
 
-    // Click on avatar/user button in header
-    const avatarButton = page.locator('header button').filter({ has: page.locator('.rounded-full') })
+    // Click on avatar/user button in header (button with rounded-full class)
+    const avatarButton = page.locator('header button.rounded-full')
     await avatarButton.click()
 
-    // Dropdown should show user info and menu items
-    await expect(page.getByText(mockUser.name)).toBeVisible()
-    await expect(page.getByText(mockUser.email)).toBeVisible()
+    // Dropdown should show user info and menu items - use exact matching
+    await expect(page.getByText(mockUser.name, { exact: true })).toBeVisible()
+    await expect(page.getByText(mockUser.email, { exact: true })).toBeVisible()
   })
 
   test('should show profile, settings, help, and logout in dropdown', async ({ page }) => {
     await page.goto('/dashboard')
 
     // Open dropdown
-    const avatarButton = page.locator('header button').filter({ has: page.locator('.rounded-full') })
+    const avatarButton = page.locator('header button.rounded-full')
     await avatarButton.click()
 
     // Check menu items

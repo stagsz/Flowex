@@ -79,7 +79,7 @@ test.describe('Authentication Flow', () => {
     await page.goto('/dashboard')
 
     // Check that dashboard is displayed with user greeting
-    await expect(page.getByText('Dashboard')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
     await expect(page.getByText(/welcome back/i)).toBeVisible()
   })
 
@@ -106,7 +106,7 @@ test.describe('Authentication Flow', () => {
 
     // Should show loading spinner while checking auth
     // Then show dashboard after auth check completes
-    await expect(page.getByText('Dashboard')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 5000 })
   })
 
   test('should handle authentication failure gracefully', async ({ page }) => {

@@ -56,7 +56,8 @@ test.describe('Upload Page', () => {
   test('should show browse files button', async ({ page }) => {
     await page.goto('/upload')
 
-    const browseButton = page.getByRole('button', { name: /browse files/i })
+    // "Browse Files" is a label (styled as button via asChild)
+    const browseButton = page.getByText('Browse Files')
     await expect(browseButton).toBeVisible()
   })
 
@@ -134,11 +135,11 @@ test.describe('Upload Flow with Files', () => {
     await fileInput.setInputFiles({
       name: 'test-drawing.pdf',
       mimeType: 'application/pdf',
-      buffer: Buffer.from('x'.repeat(1024)), // 1KB file
+      buffer: Buffer.from('x'.repeat(1024)), // 1KB file = ~0.00 MB
     })
 
-    // File size should be displayed
-    await expect(page.getByText(/mb/i)).toBeVisible()
+    // File size should be displayed (shows as "0.00 MB" for 1KB file)
+    await expect(page.getByText('0.00 MB')).toBeVisible()
   })
 
   test('should allow removing a selected file', async ({ page }) => {
@@ -155,12 +156,13 @@ test.describe('Upload Flow with Files', () => {
     // File should appear
     await expect(page.getByText('test-drawing.pdf')).toBeVisible()
 
-    // Find and click the remove button (X icon)
-    const removeButton = page.locator('button').filter({ has: page.locator('svg') }).last()
+    // Find and click the remove button (X icon) within the file item
+    const fileItem = page.locator('.rounded-lg.border').filter({ hasText: 'test-drawing.pdf' })
+    const removeButton = fileItem.getByRole('button')
     await removeButton.click()
 
-    // File should be removed (or still visible since we might have clicked wrong button)
-    // In actual implementation, the file list would be cleared
+    // File should be removed
+    await expect(page.getByText('test-drawing.pdf')).not.toBeVisible()
   })
 
   test('should enable upload button when project selected and files added', async ({ page }) => {

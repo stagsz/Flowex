@@ -92,10 +92,10 @@ test.describe('Validation Interface', () => {
   test('should display component list with tags', async ({ page }) => {
     await page.goto('/drawings/1/validate')
 
-    // Mock data includes these tags
-    await expect(page.getByText('V-101')).toBeVisible()
-    await expect(page.getByText('P-201')).toBeVisible()
-    await expect(page.getByText('PT-101')).toBeVisible()
+    // Mock data includes these tags - use exact matching to avoid partial matches
+    await expect(page.getByText('V-101', { exact: true })).toBeVisible()
+    await expect(page.getByText('P-201', { exact: true })).toBeVisible()
+    await expect(page.getByText('PT-101', { exact: true })).toBeVisible()
   })
 
   test('should show confidence scores for components', async ({ page }) => {
@@ -112,9 +112,9 @@ test.describe('Validation Interface', () => {
     // Click on Equipment filter
     await page.getByRole('button', { name: /equipment/i }).click()
 
-    // Equipment tags should still be visible
-    await expect(page.getByText('V-101')).toBeVisible()
-    await expect(page.getByText('P-201')).toBeVisible()
+    // Equipment tags should still be visible - use exact matching
+    await expect(page.getByText('V-101', { exact: true })).toBeVisible()
+    await expect(page.getByText('P-201', { exact: true })).toBeVisible()
 
     // Non-equipment tags might be hidden (depending on implementation)
   })
@@ -125,15 +125,16 @@ test.describe('Validation Interface', () => {
     const searchInput = page.getByPlaceholder(/search tags/i)
     await searchInput.fill('V-101')
 
-    // V-101 should be visible
-    await expect(page.getByText('V-101')).toBeVisible()
+    // V-101 should be visible (search filters to exact match)
+    await expect(page.getByText('V-101', { exact: true })).toBeVisible()
+    // XV-101 should NOT be visible as search is for 'V-101' which doesn't match 'XV-101' exactly
   })
 
   test('should select component when clicking on it', async ({ page }) => {
     await page.goto('/drawings/1/validate')
 
-    // Click on a component
-    const component = page.locator('text=V-101').first()
+    // Click on a component - use exact text match
+    const component = page.getByText('V-101', { exact: true })
     await component.click()
 
     // Edit panel should appear
@@ -143,18 +144,20 @@ test.describe('Validation Interface', () => {
   test('should show edit panel with tag input when component selected', async ({ page }) => {
     await page.goto('/drawings/1/validate')
 
-    // Click on a component
-    await page.locator('text=V-101').first().click()
+    // Click on a component - use exact text match
+    await page.getByText('V-101', { exact: true }).click()
 
-    // Edit panel should have tag input
-    await expect(page.getByLabel(/tag/i)).toBeVisible()
+    // Edit panel should have tag input (look for label text and input in edit panel)
+    const editPanel = page.locator('.border-t').filter({ hasText: 'Edit Component' })
+    await expect(editPanel.getByText('Tag')).toBeVisible()
+    await expect(editPanel.locator('input')).toBeVisible()
   })
 
   test('should show validate button in edit panel', async ({ page }) => {
     await page.goto('/drawings/1/validate')
 
-    // Click on a component
-    await page.locator('text=V-101').first().click()
+    // Click on a component - use exact text match
+    await page.getByText('V-101', { exact: true }).click()
 
     // Validate button should be visible
     await expect(page.getByRole('button', { name: /validate/i })).toBeVisible()
@@ -163,8 +166,8 @@ test.describe('Validation Interface', () => {
   test('should show delete button in edit panel', async ({ page }) => {
     await page.goto('/drawings/1/validate')
 
-    // Click on a component
-    await page.locator('text=V-101').first().click()
+    // Click on a component - use exact text match
+    await page.getByText('V-101', { exact: true }).click()
 
     // Delete button should be visible
     await expect(page.getByRole('button', { name: /delete/i })).toBeVisible()
