@@ -1,0 +1,204 @@
+from typing import Annotated
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.core.deps import get_current_user, get_db
+from app.models import Drawing, Project, User
+from app.services import drawings as drawing_service
+from app.services.drawings import FileValidationError
+
+router = APIRouter(prefix="/drawings", tags=["drawings"])
+
+
+class DrawingResponse(BaseModel):
+    id: str
+    project_id: str
+    original_filename: str
+    file_size_bytes: int
+    file_type: str | None
+    status: str
+    error_message: str | None
+    created_at: str
+    updated_at: str
+    processing_started_at: str | None
+    processing_completed_at: str | None
+
+    class Config:
+        from_attributes = True
+
+
+class DrawingWithUrlResponse(DrawingResponse):
+    download_url: str | None = None
+
+
+class UploadUrlResponse(BaseModel):
+    drawing_id: str
+    upload_url: str
+    storage_path: str
+
+
+@router.post(
+    "/upload/{project_id}",
+    response_model=DrawingResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_drawing(
+    project_id: UUID,
+    file: Annotated[UploadFile, File(description="PDF file to upload")],
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> DrawingResponse:
+    """Upload a new P&ID drawing (PDF file)."""
+    # Check project access
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Read file content
+    content = await file.read()
+    file_size = len(content)
+
+    try:
+        drawing = await drawing_service.create_drawing(
+            db=db,
+            project_id=project_id,
+            organization_id=current_user.organization_id,
+            filename=file.filename or "unnamed.pdf",
+            content_type=file.content_type or "application/pdf",
+            file_size=file_size,
+            file_content=content,
+        )
+    except FileValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+
+    return DrawingResponse(
+        id=str(drawing.id),
+        project_id=str(drawing.project_id),
+        original_filename=drawing.original_filename,
+        file_size_bytes=drawing.file_size_bytes,
+        file_type=drawing.file_type.value if drawing.file_type else None,
+        status=drawing.status.value,
+        error_message=drawing.error_message,
+        created_at=drawing.created_at.isoformat(),
+        updated_at=drawing.updated_at.isoformat(),
+        processing_started_at=(
+            drawing.processing_started_at.isoformat() if drawing.processing_started_at else None
+        ),
+        processing_completed_at=(
+            drawing.processing_completed_at.isoformat()
+            if drawing.processing_completed_at
+            else None
+        ),
+    )
+
+
+@router.get("/project/{project_id}", response_model=list[DrawingResponse])
+async def list_drawings(
+    project_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    skip: int = 0,
+    limit: int = 100,
+) -> list[DrawingResponse]:
+    """List all drawings for a project."""
+    # Check project access
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    drawings = await drawing_service.get_drawings_by_project(db, project_id, skip, limit)
+
+    return [
+        DrawingResponse(
+            id=str(d.id),
+            project_id=str(d.project_id),
+            original_filename=d.original_filename,
+            file_size_bytes=d.file_size_bytes,
+            file_type=d.file_type.value if d.file_type else None,
+            status=d.status.value,
+            error_message=d.error_message,
+            created_at=d.created_at.isoformat(),
+            updated_at=d.updated_at.isoformat(),
+            processing_started_at=(
+                d.processing_started_at.isoformat() if d.processing_started_at else None
+            ),
+            processing_completed_at=(
+                d.processing_completed_at.isoformat() if d.processing_completed_at else None
+            ),
+        )
+        for d in drawings
+    ]
+
+
+@router.get("/{drawing_id}", response_model=DrawingWithUrlResponse)
+async def get_drawing(
+    drawing_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> DrawingWithUrlResponse:
+    """Get a drawing by ID with download URL."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get download URL
+    try:
+        download_url = await drawing_service.get_download_url(drawing)
+    except Exception:
+        download_url = None
+
+    return DrawingWithUrlResponse(
+        id=str(drawing.id),
+        project_id=str(drawing.project_id),
+        original_filename=drawing.original_filename,
+        file_size_bytes=drawing.file_size_bytes,
+        file_type=drawing.file_type.value if drawing.file_type else None,
+        status=drawing.status.value,
+        error_message=drawing.error_message,
+        created_at=drawing.created_at.isoformat(),
+        updated_at=drawing.updated_at.isoformat(),
+        processing_started_at=(
+            drawing.processing_started_at.isoformat() if drawing.processing_started_at else None
+        ),
+        processing_completed_at=(
+            drawing.processing_completed_at.isoformat()
+            if drawing.processing_completed_at
+            else None
+        ),
+        download_url=download_url,
+    )
+
+
+@router.delete("/{drawing_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_drawing(
+    drawing_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> None:
+    """Delete a drawing."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    await drawing_service.delete_drawing(db, drawing)

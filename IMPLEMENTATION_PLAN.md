@@ -48,56 +48,26 @@
 - [x] Implement organization access control
 - [x] Write authentication tests
 
+### Phase 2.1 File Upload Service
+- [x] Create S3 storage service (upload, download, presigned URLs)
+- [x] Implement file validation (type, size, extension)
+- [x] Create drawings service (CRUD operations)
+- [x] Implement file upload endpoint (multipart)
+- [x] Create projects API routes (CRUD)
+- [x] Create drawings API routes (upload, list, get, delete)
+- [x] Write file validation tests
+
 ---
 
 ## In Progress
 
-### Phase 2.1 File Upload Service
+### Phase 2.2 PDF Processing Pipeline
 
 ---
 
 ## Backlog (Prioritized)
 
-### Phase 1: Foundation (Weeks 1-2)
-
-#### 1.2 Database Schema
-- [ ] Create organizations table
-- [ ] Create users table with SSO fields
-- [ ] Create projects table
-- [ ] Create drawings table
-- [ ] Create symbols table
-- [ ] Create lines table
-- [ ] Create text_annotations table
-- [ ] Create checklist_items table
-- [ ] Create edit_history table
-- [ ] Create usage_records table
-- [ ] Set up Alembic migrations
-- [ ] Create initial migration
-
-#### 1.3 Authentication (SSO)
-- [ ] Set up Auth0 tenant (or Azure AD B2C)
-- [ ] Configure Microsoft SSO provider
-- [ ] Configure Google SSO provider
-- [ ] Implement OAuth callback handler
-- [ ] Implement JWT token generation
-- [ ] Implement token refresh endpoint
-- [ ] Implement logout endpoint
-- [ ] Create authentication middleware
-- [ ] Implement role-based access control
-- [ ] Write authentication tests
-
 ### Phase 2: Core Backend Services (Weeks 3-4)
-
-#### 2.1 File Upload Service
-- [ ] Set up AWS S3 bucket (EU region)
-- [ ] Implement file upload endpoint (multipart)
-- [ ] Implement chunked upload for large files
-- [ ] Implement file validation (type, size)
-- [ ] Implement virus scanning integration
-- [ ] Generate unique file IDs
-- [ ] Store file metadata in database
-- [ ] Implement upload progress tracking
-- [ ] Write upload service tests
 
 #### 2.2 PDF Processing Pipeline
 - [ ] Set up background job queue (Celery + Redis)
