@@ -45,7 +45,7 @@ class Drawing(Base, UUIDMixin, TimestampMixin):
     file_type: Mapped[FileType | None] = mapped_column(Enum(FileType), nullable=True)
     status: Mapped[DrawingStatus] = mapped_column(
         Enum(DrawingStatus, name="drawingstatus", create_constraint=False),
-        default=DrawingStatus.UPLOADED,
+        default=DrawingStatus.uploaded,
         nullable=False,
         index=True,
     )
