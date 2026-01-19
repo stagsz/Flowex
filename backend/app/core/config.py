@@ -118,6 +118,10 @@ class Settings(BaseSettings):
     SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 10% of transactions for performance monitoring
     SENTRY_PROFILES_SAMPLE_RATE: float = 0.1  # 10% of transactions for profiling
 
+    # Logging Configuration
+    LOG_LEVEL: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+    LOG_JSON_FORMAT: bool = False  # Use JSON format for logs (recommended for production)
+
     @property
     def is_supabase(self) -> bool:
         """Check if using Supabase as storage provider."""

@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import * as Sentry from "@sentry/react"
 
 export interface User {
   id: string
@@ -43,6 +44,8 @@ export const useAuthStore = create<AuthState>()(
         } catch {
           // Ignore errors on logout
         }
+        // Clear Sentry user context on logout
+        Sentry.setUser(null)
         set({ user: null, token: null })
         window.location.href = "/"
       },
@@ -61,6 +64,12 @@ export const useAuthStore = create<AuthState>()(
           })
           if (response.ok) {
             const user = await response.json()
+            // Set Sentry user context for error tracking
+            Sentry.setUser({
+              id: user.id,
+              email: user.email,
+              username: user.name,
+            })
             set({ user, isLoading: false })
           } else {
             set({ user: null, token: null, isLoading: false })

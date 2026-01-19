@@ -1,16 +1,31 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.routes import auth, cloud, drawings, exports, projects
 from app.core.config import settings
+from app.core.logging import (
+    generate_request_id,
+    get_logger,
+    set_request_id,
+    setup_logging,
+)
+
+# Configure logging before anything else
+setup_logging(
+    debug=settings.DEBUG,
+    json_logs=settings.LOG_JSON_FORMAT,
+)
+
+logger = get_logger(__name__)
 
 # Initialize Sentry for error tracking and performance monitoring
 if settings.SENTRY_DSN:
     import sentry_sdk
-    from sentry_sdk.integrations.fastapi import FastApiIntegration
-    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
     from sentry_sdk.integrations.celery import CeleryIntegration
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
     from sentry_sdk.integrations.redis import RedisIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
@@ -38,6 +53,37 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    """Middleware to add request correlation IDs for log tracing."""
+
+    async def dispatch(self, request: Request, call_next):
+        """Add request ID to context and response headers."""
+        # Check for existing request ID from load balancer or generate new one
+        request_id = request.headers.get("X-Request-ID") or generate_request_id()
+        set_request_id(request_id)
+
+        # Log request start
+        logger.info(
+            f"Request started: {request.method} {request.url.path}",
+        )
+
+        response = await call_next(request)
+
+        # Add request ID to response headers for client correlation
+        response.headers["X-Request-ID"] = request_id
+
+        # Log request completion
+        logger.info(
+            f"Request completed: {request.method} {request.url.path} - {response.status_code}",
+        )
+
+        return response
+
+
+# Add request ID middleware first (before CORS)
+app.add_middleware(RequestIDMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
