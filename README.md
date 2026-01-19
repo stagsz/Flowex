@@ -27,7 +27,7 @@ Flowex uses computer vision and OCR to automatically detect symbols, extract tex
 | Backend | Python 3.11, FastAPI, SQLAlchemy |
 | Database | PostgreSQL 15, Redis |
 | AI/ML | PyTorch 2.x (ResNet-50 + FPN), Tesseract 5.x |
-| Storage | AWS S3 (EU region) |
+| Storage | Supabase Storage (dev) / AWS S3 (prod) |
 | Auth | Auth0 (OAuth 2.0 / OIDC) |
 | CAD Export | ezdxf |
 | Infrastructure | Docker, Kubernetes, GitHub Actions |
@@ -80,18 +80,52 @@ uvicorn app.main:app --reload
 
 ### Environment Variables
 
-```bash
-# Database
-DATABASE_URL=postgresql://user:pass@localhost:5432/flowex
+The application supports two storage backends - Supabase (recommended for development) and AWS S3 (for production).
 
+**Option A: Supabase (Development)**
+
+See [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md) for detailed setup instructions.
+
+```bash
+# Storage Provider
+STORAGE_PROVIDER=supabase
+
+# Supabase Configuration
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SUPABASE_STORAGE_BUCKET=drawings
+
+# Database (Supabase PostgreSQL)
+DATABASE_URL=postgresql://postgres.xxx:[password]@aws-0-eu-west-1.pooler.supabase.com:6543/postgres
+```
+
+**Option B: AWS (Production)**
+
+```bash
+# Storage Provider
+STORAGE_PROVIDER=aws
+
+# AWS Configuration
+AWS_S3_BUCKET=flowex-uploads-eu
+AWS_REGION=eu-west-1
+AWS_ACCESS_KEY_ID=xxx
+AWS_SECRET_ACCESS_KEY=xxx
+
+# Database (AWS RDS or local)
+DATABASE_URL=postgresql://user:pass@localhost:5432/flowex
+```
+
+**Common Configuration**
+
+```bash
 # Authentication
 AUTH0_DOMAIN=your-domain.auth0.com
 AUTH0_CLIENT_ID=xxx
 AUTH0_CLIENT_SECRET=xxx
 
-# Storage
-AWS_S3_BUCKET=flowex-uploads-eu
-AWS_REGION=eu-west-1
+# Redis (for background tasks)
+REDIS_URL=redis://localhost:6379/0
 
 # Optional
 SENTRY_DSN=xxx
@@ -206,22 +240,23 @@ flowex/
 ## Architecture
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Frontend  │────▶│   Backend   │────▶│  PostgreSQL │
-│   (React)   │◀────│  (FastAPI)  │◀────│   + Redis   │
-└─────────────┘     └──────┬──────┘     └─────────────┘
+┌─────────────┐     ┌─────────────┐     ┌─────────────────────┐
+│   Frontend  │────▶│   Backend   │────▶│     PostgreSQL      │
+│   (React)   │◀────│  (FastAPI)  │◀────│ (Supabase or Local) │
+└─────────────┘     └──────┬──────┘     └─────────────────────┘
                            │
               ┌────────────┼────────────┐
               ▼            ▼            ▼
         ┌──────────┐ ┌──────────┐ ┌──────────┐
-        │   S3     │ │  Celery  │ │   ML     │
-        │ Storage  │ │  Workers │ │ Pipeline │
+        │ Storage  │ │  Celery  │ │   ML     │
+        │ Supabase │ │  Workers │ │ Pipeline │
+        │ or S3    │ │  + Redis │ │          │
         └──────────┘ └──────────┘ └──────────┘
 ```
 
 **Processing Flow:**
 1. User uploads PDF P&ID
-2. File stored in S3, job queued in Celery
+2. File stored in Supabase/S3, job queued in Celery
 3. PDF processed (vector extraction or image conversion)
 4. CNN detects symbols, Tesseract extracts text
 5. Results stored in database

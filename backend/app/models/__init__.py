@@ -1,5 +1,6 @@
 # Database models
 from app.models.base import Base
+from app.models.cloud_connection import CloudConnection, CloudProvider
 from app.models.drawing import Drawing, DrawingStatus, FileType
 from app.models.line import Line
 from app.models.organization import Organization, SubscriptionTier
@@ -23,4 +24,6 @@ __all__ = [
     "SymbolCategory",
     "Line",
     "TextAnnotation",
+    "CloudConnection",
+    "CloudProvider",
 ]

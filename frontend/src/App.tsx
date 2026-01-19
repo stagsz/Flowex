@@ -8,6 +8,7 @@ import {
   DrawingsPage,
   UploadPage,
   ValidationPage,
+  SettingsIntegrationsPage,
 } from "@/pages"
 import { useAuthStore } from "@/stores/authStore"
 
@@ -50,6 +51,7 @@ function App() {
           <Route path="/drawings" element={<DrawingsPage />} />
           <Route path="/drawings/:drawingId/validate" element={<ValidationPage />} />
           <Route path="/upload" element={<UploadPage />} />
+          <Route path="/settings/integrations" element={<SettingsIntegrationsPage />} />
         </Route>
 
         {/* Redirects */}

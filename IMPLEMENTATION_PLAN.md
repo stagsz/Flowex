@@ -8,7 +8,7 @@
 
 ## Current Focus
 
-**Phase 6: Export Features** - DXF generation and data list exports.
+**Phase 7: Cloud Storage Integrations** - COMPLETED.
 
 ---
 
@@ -117,50 +117,86 @@
 - [x] Create edit panel for symbols
 - [x] Implement validation progress tracking
 
+### Phase 6: Export Features (Complete)
+
+#### 6.1 AutoCAD Export
+- [x] Implement DXF generation (ezdxf)
+- [x] Create ISO 10628 symbol block library (50 symbol classes)
+- [x] Implement layer structure (11 layers per spec)
+- [x] Implement symbol placement with block references
+- [x] Implement line drawing with proper layers
+- [x] Implement text placement
+- [x] Implement title block generation
+- [x] Write export tests
+
+#### 6.2 Data List Exports
+- [x] Implement Equipment List generator (Excel, CSV, PDF)
+- [x] Implement Line List generator
+- [x] Implement Instrument List generator
+- [x] Implement Valve List generator
+- [x] Implement MTO generator
+- [x] Implement Comparison Report generator
+- [x] Create formatted Excel templates with styling
+- [x] Write export tests
+
+#### 6.3 Export API Endpoints
+- [x] POST /api/v1/exports/drawings/{id}/dxf - DXF export
+- [x] POST /api/v1/exports/drawings/{id}/lists - Data list export
+- [x] POST /api/v1/exports/drawings/{id}/report - Comparison report
+- [x] GET /api/v1/exports/jobs/{id}/status - Job status
+- [x] GET /api/v1/exports/jobs/{id}/download - Download export
+
+### Phase 7: Cloud Storage Integrations (Complete)
+
+#### 7.1 Backend Infrastructure
+- [x] Create CloudConnection database model
+- [x] Add config settings for Microsoft and Google OAuth
+- [x] Create token encryption utility (Fernet)
+- [x] Implement cloud storage service interfaces
+
+#### 7.2 Provider Implementations
+- [x] Implement Microsoft Graph API service (OneDrive/SharePoint)
+- [x] Implement Google Drive API service
+- [x] Implement token refresh logic
+- [x] Implement SharePoint site/drive browsing
+
+#### 7.3 API Endpoints
+- [x] GET /api/v1/cloud/connections - List connections
+- [x] POST /api/v1/cloud/connections/{provider}/connect - Initiate OAuth
+- [x] GET /api/v1/cloud/callback/{provider} - OAuth callback
+- [x] DELETE /api/v1/cloud/connections/{id} - Disconnect
+- [x] GET /api/v1/cloud/connections/{id}/browse - Browse folders
+- [x] GET /api/v1/cloud/connections/{id}/search - Search files
+- [x] POST /api/v1/cloud/connections/{id}/import - Import files
+- [x] POST /api/v1/cloud/connections/{id}/export - Export files
+- [x] POST /api/v1/cloud/connections/{id}/folders - Create folder
+- [x] GET /api/v1/cloud/connections/{id}/sharepoint/sites - List SharePoint sites
+- [x] POST /api/v1/cloud/connections/{id}/sharepoint/configure - Configure SharePoint
+
+#### 7.4 Background Tasks
+- [x] Implement cloud import Celery task
+- [x] Implement cloud export Celery task
+
+#### 7.5 Frontend Components
+- [x] Create Zustand cloud store
+- [x] Create CloudConnectionCard component
+- [x] Create CloudFilePicker dialog
+- [x] Create CloudFolderPicker dialog
+- [x] Create Settings/Integrations page
+- [x] Add route for integrations page
+
+#### 7.6 Testing
+- [x] Write backend tests for cloud storage
+
 ---
 
 ## In Progress
 
-### Phase 6: Export Features
+_None - Phase 7 Complete_
 
 ---
 
 ## Backlog (Prioritized)
-
-### Phase 6: Export Functionality (Weeks 12-13)
-
-#### 5.1 AutoCAD Export
-- [ ] Implement DXF generation (ezdxf)
-- [ ] Create ISO 10628 symbol block library
-- [ ] Implement layer structure
-- [ ] Implement symbol placement
-- [ ] Implement line drawing
-- [ ] Implement text placement
-- [ ] Implement title block
-- [ ] Generate DWG from DXF (if needed)
-- [ ] Write export tests
-
-#### 5.2 Data List Exports
-- [ ] Implement Equipment List generator (Excel, CSV, PDF)
-- [ ] Implement Line List generator
-- [ ] Implement Instrument List generator
-- [ ] Implement Valve List generator
-- [ ] Implement MTO generator
-- [ ] Implement Comparison Report generator
-- [ ] Create formatted Excel templates
-- [ ] Write export tests
-
-### Phase 6: Integrations (Week 14)
-
-#### 6.1 Cloud Storage
-- [ ] Implement Microsoft Graph API integration
-- [ ] Implement OneDrive file picker
-- [ ] Implement SharePoint site browser
-- [ ] Implement Google Drive API integration
-- [ ] Implement file import from cloud
-- [ ] Implement file export to cloud
-- [ ] Implement token refresh logic
-- [ ] Write integration tests
 
 ### Phase 7: Testing & Polish (Weeks 15-16)
 

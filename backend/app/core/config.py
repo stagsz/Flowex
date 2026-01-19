@@ -1,4 +1,15 @@
+from enum import Enum
+from typing import Literal
+
 from pydantic_settings import BaseSettings
+
+
+class StorageProvider(str, Enum):
+    """Supported storage providers."""
+
+    AWS = "aws"
+    SUPABASE = "supabase"
+    LOCAL = "local"  # For testing
 
 
 class Settings(BaseSettings):
@@ -6,8 +17,20 @@ class Settings(BaseSettings):
     APP_NAME: str = "Flowex"
     DEBUG: bool = False
 
+    # Storage Provider Selection
+    # Set to "supabase" for development, "aws" for production
+    STORAGE_PROVIDER: StorageProvider = StorageProvider.SUPABASE
+
     # Database
+    # For Supabase: postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
+    # For local: postgresql://postgres:postgres@localhost:5432/flowex
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/flowex"
+
+    # Supabase Configuration (for development)
+    SUPABASE_URL: str = ""  # https://[project-ref].supabase.co
+    SUPABASE_ANON_KEY: str = ""  # Public anon key
+    SUPABASE_SERVICE_ROLE_KEY: str = ""  # Service role key (for backend operations)
+    SUPABASE_STORAGE_BUCKET: str = "drawings"  # Bucket name in Supabase Storage
 
     # Authentication
     AUTH0_DOMAIN: str = ""
@@ -17,7 +40,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "RS256"
     ACCESS_TOKEN_EXPIRE_HOURS: int = 24
 
-    # AWS S3
+    # AWS S3 (for production)
     AWS_S3_BUCKET: str = "flowex-uploads-eu"
     AWS_REGION: str = "eu-west-1"
     AWS_ACCESS_KEY_ID: str = ""
@@ -28,6 +51,50 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+
+    # Microsoft OAuth (OneDrive/SharePoint)
+    MICROSOFT_CLIENT_ID: str = ""
+    MICROSOFT_CLIENT_SECRET: str = ""
+    MICROSOFT_TENANT_ID: str = "common"  # "common" for multi-tenant
+    MICROSOFT_REDIRECT_URI: str = "http://localhost:8000/api/v1/cloud/callback/microsoft"
+
+    # Google OAuth (Google Drive)
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/cloud/callback/google"
+
+    # Token Encryption Key (Fernet - must be 32 url-safe base64-encoded bytes)
+    TOKEN_ENCRYPTION_KEY: str = ""  # Generate with: Fernet.generate_key().decode()
+
+    @property
+    def is_supabase(self) -> bool:
+        """Check if using Supabase as storage provider."""
+        return self.STORAGE_PROVIDER == StorageProvider.SUPABASE
+
+    @property
+    def is_aws(self) -> bool:
+        """Check if using AWS as storage provider."""
+        return self.STORAGE_PROVIDER == StorageProvider.AWS
+
+    @property
+    def microsoft_auth_url(self) -> str:
+        """Microsoft OAuth2 authorization endpoint."""
+        return f"https://login.microsoftonline.com/{self.MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize"
+
+    @property
+    def microsoft_token_url(self) -> str:
+        """Microsoft OAuth2 token endpoint."""
+        return f"https://login.microsoftonline.com/{self.MICROSOFT_TENANT_ID}/oauth2/v2.0/token"
+
+    @property
+    def google_auth_url(self) -> str:
+        """Google OAuth2 authorization endpoint."""
+        return "https://accounts.google.com/o/oauth2/v2/auth"
+
+    @property
+    def google_token_url(self) -> str:
+        """Google OAuth2 token endpoint."""
+        return "https://oauth2.googleapis.com/token"
 
     class Config:
         env_file = ".env"

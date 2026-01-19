@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Flowex is an AI-powered P&ID (Piping & Instrumentation Diagram) digitization platform. It converts legacy PDF P&IDs into editable AutoCAD drawings (DWG/DXF) and structured engineering data lists using computer vision and OCR.
 
-**Status:** Planning phase - specifications complete, no production code yet.
+**Status:** Phase 6 complete - Export features implemented.
 
 ## Tech Stack
 
@@ -14,9 +14,9 @@ Flowex is an AI-powered P&ID (Piping & Instrumentation Diagram) digitization pla
 |-------|------------|
 | Frontend | React 18, TypeScript 5, Tailwind CSS, shadcn/ui, Zustand, Vitest |
 | Backend | Python 3.11, FastAPI, SQLAlchemy, pytest |
-| Database | PostgreSQL 15, Redis (cache) |
+| Database | PostgreSQL 15 (Supabase or local), Redis (cache) |
 | AI/ML | PyTorch 2.x (ResNet-50 + FPN), Tesseract 5.x (OCR) |
-| Storage | AWS S3 (eu-west-1) |
+| Storage | Supabase Storage (dev) / AWS S3 (prod) |
 | Auth | Auth0 (Microsoft/Google SSO) |
 | CAD Export | ezdxf |
 
@@ -68,7 +68,7 @@ flowex/
 
 **Data Flow:**
 ```
-PDF Upload → S3 Storage → PDF Processing (Celery) → Symbol Detection (CNN) → OCR (Tesseract)
+PDF Upload → Storage (Supabase/S3) → PDF Processing (Celery) → Symbol Detection (CNN) → OCR (Tesseract)
     ↓
 Validation Interface (side-by-side) ← Human Review
     ↓
@@ -105,11 +105,31 @@ This project uses the "Ralph" autonomous AI methodology:
 
 ## Environment Variables
 
+**Development (Supabase):**
 ```bash
+STORAGE_PROVIDER=supabase
+DATABASE_URL=postgresql://postgres.xxx:[password]@aws-0-eu-west-1.pooler.supabase.com:6543/postgres
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=xxx
+SUPABASE_STORAGE_BUCKET=drawings
+```
+
+**Production (AWS):**
+```bash
+STORAGE_PROVIDER=aws
 DATABASE_URL=postgresql://user:pass@localhost:5432/flowex
+AWS_S3_BUCKET=flowex-uploads-eu
+AWS_REGION=eu-west-1
+AWS_ACCESS_KEY_ID=xxx
+AWS_SECRET_ACCESS_KEY=xxx
+```
+
+**Common:**
+```bash
 AUTH0_DOMAIN=your-domain.auth0.com
 AUTH0_CLIENT_ID=xxx
 AUTH0_CLIENT_SECRET=xxx
-AWS_S3_BUCKET=flowex-uploads-eu
-AWS_REGION=eu-west-1
+REDIS_URL=redis://localhost:6379/0
 ```
+
+See `docs/SUPABASE_SETUP.md` for detailed Supabase configuration.
