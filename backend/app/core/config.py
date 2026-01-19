@@ -112,6 +112,12 @@ class Settings(BaseSettings):
     # Token Encryption Key (Fernet - must be 32 url-safe base64-encoded bytes)
     TOKEN_ENCRYPTION_KEY: str = ""  # Generate with: Fernet.generate_key().decode()
 
+    # Sentry Monitoring
+    SENTRY_DSN: str = ""  # Sentry DSN for error tracking (leave empty to disable)
+    SENTRY_ENVIRONMENT: str = "development"  # development, staging, production
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 10% of transactions for performance monitoring
+    SENTRY_PROFILES_SAMPLE_RATE: float = 0.1  # 10% of transactions for profiling
+
     @property
     def is_supabase(self) -> bool:
         """Check if using Supabase as storage provider."""
