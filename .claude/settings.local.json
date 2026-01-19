@@ -6,7 +6,10 @@
       "Bash(gh repo edit:*)",
       "Bash(git commit:*)",
       "Bash(git push)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(python test_supabase_connection.py:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)"
     ]
   }
 }
