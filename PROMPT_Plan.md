@@ -135,13 +135,28 @@ Write the complete `IMPLEMENTATION_PLAN.md` file to disk.
 
 ## Tech Stack Reference
 
-- **Frontend:** React + TypeScript + Tailwind CSS
-- **Backend:** Python FastAPI
-- **Database:** PostgreSQL
-- **AI/ML:** PyTorch (Custom CNN), Tesseract OCR
-- **File Storage:** AWS S3 or Azure Blob (EU region)
-- **Auth:** Auth0 or Azure AD B2C (SSO)
+- **Frontend:** React 18 + TypeScript 5 + Tailwind CSS + shadcn/ui
+- **Backend:** Python 3.11 + FastAPI
+- **Database:** PostgreSQL 15 (Supabase or local)
+- **AI/ML:** PyTorch 2.x (Custom CNN), Tesseract 5.x OCR
+- **File Storage:** Supabase Storage (dev) / AWS S3 (prod) - EU region for GDPR
+- **Auth:** Auth0 (Microsoft/Google SSO)
+- **Cache:** Redis
 - **CAD Export:** ezdxf (Python)
+
+## Supabase Integration (Development)
+
+For local development, use Supabase for database and file storage:
+
+```bash
+STORAGE_PROVIDER=supabase
+DATABASE_URL=postgresql://postgres.xxx:[password]@aws-0-eu-west-1.pooler.supabase.com:6543/postgres
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=xxx
+SUPABASE_STORAGE_BUCKET=drawings
+```
+
+See `docs/SUPABASE_SETUP.md` for detailed configuration.
 
 ---
 

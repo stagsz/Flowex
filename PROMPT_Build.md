@@ -163,10 +163,28 @@ After committing and updating files, exit cleanly. The loop will restart with fr
 
 - **Frontend:** React 18 + TypeScript 5 + Tailwind CSS + shadcn/ui
 - **Backend:** Python 3.11 + FastAPI
-- **Database:** PostgreSQL 15
+- **Database:** PostgreSQL 15 (Supabase or local)
 - **AI/ML:** PyTorch 2.x, Tesseract 5.x
+- **File Storage:** Supabase Storage (dev) / AWS S3 (prod) - EU region for GDPR
+- **Auth:** Auth0 (Microsoft/Google SSO)
+- **Cache:** Redis
+- **CAD Export:** ezdxf
 - **Testing:** Vitest (frontend), pytest (backend)
 - **Linting:** ESLint + Prettier (frontend), Ruff (backend)
+
+## Supabase Integration (Development)
+
+For local development, use Supabase for database and file storage:
+
+```bash
+STORAGE_PROVIDER=supabase
+DATABASE_URL=postgresql://postgres.xxx:[password]@aws-0-eu-west-1.pooler.supabase.com:6543/postgres
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=xxx
+SUPABASE_STORAGE_BUCKET=drawings
+```
+
+See `docs/SUPABASE_SETUP.md` for detailed configuration.
 
 ---
 
