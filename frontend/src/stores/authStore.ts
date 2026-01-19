@@ -2,6 +2,18 @@ import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import * as Sentry from "@sentry/react"
 
+// Dev auth bypass - auto-login with dev user in development
+const DEV_AUTH_BYPASS = import.meta.env.VITE_DEV_AUTH_BYPASS === "true"
+
+const DEV_USER: User = {
+  id: "dev-user-id",
+  email: "dev@flowex.local",
+  name: "Dev User",
+  role: "admin",
+  organizationId: "dev-org-id",
+  organizationName: "Dev Organization",
+}
+
 export interface User {
   id: string
   email: string
@@ -28,12 +40,16 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
-      user: null,
-      token: null,
+      user: DEV_AUTH_BYPASS ? DEV_USER : null,
+      token: DEV_AUTH_BYPASS ? "dev-token" : null,
       isLoading: false,
       error: null,
 
       login: () => {
+        if (DEV_AUTH_BYPASS) {
+          set({ user: DEV_USER, token: "dev-token" })
+          return
+        }
         // Redirect to Auth0 login
         window.location.href = "/api/auth/login"
       },
@@ -55,6 +71,10 @@ export const useAuthStore = create<AuthState>()(
       setError: (error) => set({ error }),
 
       checkAuth: async () => {
+        if (DEV_AUTH_BYPASS) {
+          set({ user: DEV_USER, token: "dev-token", isLoading: false })
+          return
+        }
         set({ isLoading: true, error: null })
         try {
           const response = await fetch("/api/auth/me", {
@@ -82,6 +102,8 @@ export const useAuthStore = create<AuthState>()(
     {
       name: "flowex-auth",
       partialize: (state) => ({ token: state.token }),
+      // Skip rehydration in dev bypass mode
+      skipHydration: DEV_AUTH_BYPASS,
     }
   )
 )

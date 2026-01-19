@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     # Application
     APP_NAME: str = "Flowex"
     DEBUG: bool = False
+    DEV_AUTH_BYPASS: bool = False  # Skip authentication in dev mode
 
     # Storage Provider Selection
     # Set to "supabase" for development, "aws" for production

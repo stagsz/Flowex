@@ -9,7 +9,11 @@
       "Bash(bash:*)",
       "Bash(python test_supabase_connection.py:*)",
       "Bash(pip install:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "WebFetch(domain:supabase.com)",
+      "Bash(nslookup:*)",
+      "Bash(curl:*)",
+      "Bash(ls:*)"
     ]
   }
 }
