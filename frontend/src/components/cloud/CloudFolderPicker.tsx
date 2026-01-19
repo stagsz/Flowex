@@ -45,7 +45,7 @@ export function CloudFolderPicker({
       setNewFolderName("")
       setShowNewFolder(false)
     }
-  }, [open, connection])
+  }, [open, connection, browse])
 
   const handleFolderClick = (folder: CloudFolder) => {
     if (connection) {

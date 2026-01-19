@@ -34,7 +34,7 @@ export function SettingsIntegrationsPage() {
 
   useEffect(() => {
     fetchConnections()
-  }, [])
+  }, [fetchConnections])
 
   // Check URL for OAuth callback result
   useEffect(() => {
@@ -51,7 +51,7 @@ export function SettingsIntegrationsPage() {
       alert(`Connection failed: ${errorParam}`)
       window.history.replaceState({}, "", window.location.pathname)
     }
-  }, [])
+  }, [fetchConnections])
 
   const getConnectedProvider = (providerId: string) => {
     return connections.find((c) => c.provider === providerId)

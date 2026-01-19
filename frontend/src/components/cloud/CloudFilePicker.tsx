@@ -69,7 +69,7 @@ export function CloudFilePicker({
       setSearchQuery("")
       setSearchResults(null)
     }
-  }, [open, connection])
+  }, [open, connection, browse, clearSelection])
 
   const handleFolderClick = (folder: CloudFolder) => {
     if (connection) {
