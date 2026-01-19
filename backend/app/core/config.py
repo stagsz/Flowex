@@ -5,7 +5,7 @@ from functools import lru_cache
 from typing import Any, Self
 
 from pydantic import model_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class StorageProvider(str, Enum):
@@ -244,9 +244,7 @@ class Settings(BaseSettings):
 
         return health
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
 
 settings = Settings()

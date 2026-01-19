@@ -2,7 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
@@ -26,8 +26,7 @@ class DrawingResponse(BaseModel):
     processing_started_at: str | None
     processing_completed_at: str | None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DrawingWithUrlResponse(DrawingResponse):
@@ -291,8 +290,7 @@ class SymbolResponse(BaseModel):
     confidence: float | None
     is_verified: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TextAnnotationResponse(BaseModel):
@@ -307,8 +305,7 @@ class TextAnnotationResponse(BaseModel):
     is_verified: bool
     associated_symbol_id: str | None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SymbolsAndTextsResponse(BaseModel):
