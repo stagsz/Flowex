@@ -1,5 +1,8 @@
+import asyncio
 import logging
 from datetime import UTC, datetime
+from io import BytesIO
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -20,8 +23,8 @@ from app.services.storage import get_storage_service
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
-def process_drawing(self, drawing_id: str) -> dict:
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)  # type: ignore[misc]
+def process_drawing(self: Any, drawing_id: str) -> dict[str, Any]:
     """
     Process an uploaded PDF drawing.
 
@@ -56,12 +59,10 @@ def process_drawing(self, drawing_id: str) -> dict:
 
         logger.info(f"Starting processing for drawing {drawing_id}")
 
-        # Download PDF from S3
+        # Download PDF from storage
         storage = get_storage_service()
         try:
-            pdf_bytes = storage.s3_client.get_object(
-                Bucket=storage.bucket, Key=drawing.storage_path
-            )["Body"].read()
+            pdf_bytes = asyncio.run(storage.download_file(drawing.storage_path))
         except Exception as e:
             raise PDFProcessingError(f"Failed to download PDF: {e}") from e
 
@@ -95,16 +96,11 @@ def process_drawing(self, drawing_id: str) -> dict:
             all_tiles.extend([(i, t) for t in tiles])
             logger.debug(f"Created {len(tiles)} tiles for page {i + 1}")
 
-        # Store processed images in S3 (optional - for debugging/review)
+        # Store processed images (optional - for debugging/review)
         base_path = drawing.storage_path.rsplit("/", 1)[0]
         for i, img_bytes in enumerate(processed_images):
             img_path = f"{base_path}/processed/page_{i + 1}.png"
-            storage.s3_client.put_object(
-                Bucket=storage.bucket,
-                Key=img_path,
-                Body=img_bytes,
-                ContentType="image/png",
-            )
+            asyncio.run(storage.upload_file(BytesIO(img_bytes), img_path, "image/png"))
 
         # Update drawing status to review (ready for AI processing)
         drawing.status = DrawingStatus.REVIEW
@@ -125,25 +121,27 @@ def process_drawing(self, drawing_id: str) -> dict:
 
     except PDFProcessingError as e:
         logger.error(f"PDF processing error for {drawing_id}: {e}")
-        drawing.status = DrawingStatus.ERROR
-        drawing.error_message = str(e)
-        db.commit()
+        if drawing is not None:
+            drawing.status = DrawingStatus.ERROR
+            drawing.error_message = str(e)
+            db.commit()
 
         # Retry on transient errors
         raise self.retry(exc=e)
 
     except Exception as e:
         logger.error(f"Unexpected error processing {drawing_id}: {e}")
-        drawing.status = DrawingStatus.ERROR
-        drawing.error_message = f"Unexpected error: {e}"
-        db.commit()
+        if drawing is not None:
+            drawing.status = DrawingStatus.ERROR
+            drawing.error_message = f"Unexpected error: {e}"
+            db.commit()
         return {"error": str(e), "drawing_id": drawing_id}
 
     finally:
         db.close()
 
 
-@celery_app.task
-def check_processing_health() -> dict:
+@celery_app.task  # type: ignore[misc]
+def check_processing_health() -> dict[str, str]:
     """Health check task to verify Celery is working."""
     return {"status": "healthy", "worker": "celery"}

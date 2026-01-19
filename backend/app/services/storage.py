@@ -85,7 +85,7 @@ class BaseStorageService(ABC):
 class S3StorageService(BaseStorageService):
     """Service for managing file storage in AWS S3."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.s3_client = boto3.client(
             "s3",
             region_name=settings.AWS_REGION,
@@ -123,7 +123,8 @@ class S3StorageService(BaseStorageService):
         """Download a file from S3."""
         try:
             response = self.s3_client.get_object(Bucket=self.bucket, Key=storage_path)
-            return response["Body"].read()
+            content: bytes = response["Body"].read()
+            return content
         except ClientError as e:
             if e.response["Error"]["Code"] == "NoSuchKey":
                 raise FileNotFoundError(f"File not found: {storage_path}") from e
@@ -139,7 +140,7 @@ class S3StorageService(BaseStorageService):
     async def get_presigned_url(self, storage_path: str, expires_in: int = 3600) -> str:
         """Generate a presigned URL for downloading a file."""
         try:
-            url = self.s3_client.generate_presigned_url(
+            url: str = self.s3_client.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": self.bucket, "Key": storage_path},
                 ExpiresIn=expires_in,
@@ -156,7 +157,7 @@ class S3StorageService(BaseStorageService):
     ) -> str:
         """Generate a presigned URL for uploading a file directly to S3."""
         try:
-            url = self.s3_client.generate_presigned_url(
+            url: str = self.s3_client.generate_presigned_url(
                 "put_object",
                 Params={
                     "Bucket": self.bucket,
@@ -173,7 +174,7 @@ class S3StorageService(BaseStorageService):
 class SupabaseStorageService(BaseStorageService):
     """Service for managing file storage in Supabase Storage."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         from supabase import create_client
 
         if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
@@ -259,7 +260,7 @@ class SupabaseStorageService(BaseStorageService):
                 path=storage_path,
                 expires_in=expires_in,
             )
-            return result["signedURL"]
+            return str(result["signedUrl"])
         except Exception as e:
             raise StorageError(f"Failed to generate signed URL: {e}") from e
 
@@ -274,7 +275,7 @@ class SupabaseStorageService(BaseStorageService):
             result = self.client.storage.from_(self.bucket).create_signed_upload_url(
                 path=storage_path,
             )
-            return result["signedURL"]
+            return str(result["signedUrl"])
         except Exception as e:
             raise StorageError(f"Failed to generate signed upload URL: {e}") from e
 

@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+from io import BytesIO
+from typing import Any
 from uuid import UUID
 
 from app.core.celery_app import celery_app
@@ -98,14 +100,14 @@ async def _get_cloud_file_info(
         return files
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)  # type: ignore[misc]
 def import_from_cloud(
-    self,
+    self: Any,
     connection_id: str,
     user_id: str,
     file_ids: list[str],
     project_id: str,
-) -> dict:
+) -> dict[str, Any]:
     """
     Import files from cloud storage to a project.
 
@@ -152,14 +154,14 @@ def import_from_cloud(
 
                 # Upload to internal storage
                 storage_path = f"projects/{project_id}/drawings/{filename}"
-                storage.upload_file(storage_path, content, "application/pdf")
+                asyncio.run(storage.upload_file(BytesIO(content), storage_path, "application/pdf"))
 
                 # Create drawing record
                 drawing = Drawing(
                     project_id=UUID(project_id),
-                    name=filename,
+                    original_filename=filename,
                     storage_path=storage_path,
-                    file_size=len(content),
+                    file_size_bytes=len(content),
                     status=DrawingStatus.UPLOADED,
                 )
                 db.add(drawing)
@@ -197,15 +199,15 @@ def import_from_cloud(
         db.close()
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)  # type: ignore[misc]
 def export_to_cloud(
-    self,
+    self: Any,
     connection_id: str,
     user_id: str,
     drawing_id: str,
     folder_id: str,
     export_types: list[str],
-) -> dict:
+) -> dict[str, Any]:
     """
     Export drawing files to cloud storage.
 
@@ -242,8 +244,8 @@ def export_to_cloud(
                     # Get DXF file from internal storage
                     dxf_path = f"projects/{drawing.project_id}/exports/{drawing_id}.dxf"
                     try:
-                        content = storage.download_file(dxf_path)
-                        filename = f"{drawing.name.replace('.pdf', '')}.dxf"
+                        content = asyncio.run(storage.download_file(dxf_path))
+                        filename = f"{drawing.original_filename.replace('.pdf', '')}.dxf"
                         mime_type = "application/dxf"
                     except Exception:
                         errors.append({
@@ -255,8 +257,8 @@ def export_to_cloud(
                 elif export_type == "equipment_list":
                     xlsx_path = f"projects/{drawing.project_id}/exports/{drawing_id}_equipment.xlsx"
                     try:
-                        content = storage.download_file(xlsx_path)
-                        filename = f"{drawing.name.replace('.pdf', '')}_Equipment-List.xlsx"
+                        content = asyncio.run(storage.download_file(xlsx_path))
+                        filename = f"{drawing.original_filename.replace('.pdf', '')}_Equipment-List.xlsx"
                         mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     except Exception:
                         errors.append({
@@ -268,8 +270,8 @@ def export_to_cloud(
                 elif export_type == "line_list":
                     xlsx_path = f"projects/{drawing.project_id}/exports/{drawing_id}_lines.xlsx"
                     try:
-                        content = storage.download_file(xlsx_path)
-                        filename = f"{drawing.name.replace('.pdf', '')}_Line-List.xlsx"
+                        content = asyncio.run(storage.download_file(xlsx_path))
+                        filename = f"{drawing.original_filename.replace('.pdf', '')}_Line-List.xlsx"
                         mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     except Exception:
                         errors.append({
@@ -281,8 +283,8 @@ def export_to_cloud(
                 elif export_type == "instrument_list":
                     xlsx_path = f"projects/{drawing.project_id}/exports/{drawing_id}_instruments.xlsx"
                     try:
-                        content = storage.download_file(xlsx_path)
-                        filename = f"{drawing.name.replace('.pdf', '')}_Instrument-List.xlsx"
+                        content = asyncio.run(storage.download_file(xlsx_path))
+                        filename = f"{drawing.original_filename.replace('.pdf', '')}_Instrument-List.xlsx"
                         mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     except Exception:
                         errors.append({

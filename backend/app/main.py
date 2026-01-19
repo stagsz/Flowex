@@ -1,4 +1,6 @@
-from fastapi import FastAPI, Request
+from collections.abc import Awaitable, Callable
+
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -27,7 +29,7 @@ if settings.SENTRY_DSN:
     from sentry_sdk.integrations.redis import RedisIntegration
     from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
-    sentry_sdk.init(
+    sentry_sdk.init(  # type: ignore[call-arg]
         dsn=settings.SENTRY_DSN,
         environment=settings.SENTRY_ENVIRONMENT,
         traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
@@ -58,7 +60,9 @@ app = FastAPI(
 class RequestIDMiddleware(BaseHTTPMiddleware):
     """Middleware to add request correlation IDs for log tracing."""
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         """Add request ID to context and response headers."""
         # Check for existing request ID from load balancer or generate new one
         request_id = request.headers.get("X-Request-ID") or generate_request_id()
