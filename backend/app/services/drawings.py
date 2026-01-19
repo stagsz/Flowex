@@ -78,7 +78,7 @@ async def create_drawing(
         original_filename=filename,
         storage_path=storage_path,
         file_size_bytes=file_size,
-        status=DrawingStatus.UPLOADED,
+        status=DrawingStatus.uploaded,
     )
     db.add(drawing)
     db.commit()
@@ -127,9 +127,9 @@ async def update_drawing_status(
     drawing.status = status
     drawing.error_message = error_message
 
-    if status == DrawingStatus.PROCESSING:
+    if status == DrawingStatus.processing:
         drawing.processing_started_at = datetime.now(UTC)
-    elif status in [DrawingStatus.REVIEW, DrawingStatus.COMPLETE, DrawingStatus.ERROR]:
+    elif status in [DrawingStatus.review, DrawingStatus.complete, DrawingStatus.error]:
         drawing.processing_completed_at = datetime.now(UTC)
 
     db.commit()

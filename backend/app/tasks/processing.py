@@ -80,7 +80,7 @@ def process_drawing(self: Any, drawing_id: str) -> dict[str, Any]:
             return {"error": "Drawing not found", "drawing_id": drawing_id}
 
         # Update status to processing
-        drawing.status = DrawingStatus.PROCESSING
+        drawing.status = DrawingStatus.processing
         drawing.processing_started_at = datetime.now(UTC)
         db.commit()
 
@@ -194,7 +194,7 @@ def process_drawing(self: Any, drawing_id: str) -> dict[str, Any]:
             # The drawing will still be in REVIEW status for manual annotation
 
         # Update drawing status to review (ready for validation)
-        drawing.status = DrawingStatus.REVIEW
+        drawing.status = DrawingStatus.review
         drawing.processing_completed_at = datetime.now(UTC)
         db.commit()
 
@@ -215,7 +215,7 @@ def process_drawing(self: Any, drawing_id: str) -> dict[str, Any]:
     except PDFProcessingError as e:
         logger.error(f"PDF processing error for {drawing_id}: {e}")
         if drawing is not None:
-            drawing.status = DrawingStatus.ERROR
+            drawing.status = DrawingStatus.error
             drawing.error_message = str(e)
             db.commit()
 
@@ -225,7 +225,7 @@ def process_drawing(self: Any, drawing_id: str) -> dict[str, Any]:
     except Exception as e:
         logger.error(f"Unexpected error processing {drawing_id}: {e}")
         if drawing is not None:
-            drawing.status = DrawingStatus.ERROR
+            drawing.status = DrawingStatus.error
             drawing.error_message = f"Unexpected error: {e}"
             db.commit()
         return {"error": str(e), "drawing_id": drawing_id}

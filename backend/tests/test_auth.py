@@ -9,27 +9,31 @@ client = TestClient(app)
 
 
 def test_login_redirect_google():
-    """Test login redirects to Auth0 for Google SSO."""
+    """Test login redirects to OAuth provider for Google SSO."""
     response = client.get(
         "/api/v1/auth/login",
         params={"provider": "google", "redirect_uri": "http://localhost:5173/callback"},
         follow_redirects=False,
     )
     assert response.status_code == 307
-    assert "authorize" in response.headers["location"]
-    assert "google-oauth2" in response.headers["location"]
+    location = response.headers["location"]
+    assert "authorize" in location
+    # Works with both Auth0 (google-oauth2) and Supabase (provider=google)
+    assert "google" in location
 
 
 def test_login_redirect_microsoft():
-    """Test login redirects to Auth0 for Microsoft SSO."""
+    """Test login redirects to OAuth provider for Microsoft SSO."""
     response = client.get(
         "/api/v1/auth/login",
         params={"provider": "microsoft", "redirect_uri": "http://localhost:5173/callback"},
         follow_redirects=False,
     )
     assert response.status_code == 307
-    assert "authorize" in response.headers["location"]
-    assert "windowslive" in response.headers["location"]
+    location = response.headers["location"]
+    assert "authorize" in location
+    # Works with both Auth0 (windowslive) and Supabase (provider=microsoft)
+    assert "microsoft" in location or "windowslive" in location
 
 
 def test_login_invalid_provider():

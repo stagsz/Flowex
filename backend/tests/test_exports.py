@@ -33,7 +33,7 @@ def mock_drawing():
     drawing.id = uuid4()
     drawing.project_id = uuid4()
     drawing.original_filename = "P&ID-001.pdf"
-    drawing.status = DrawingStatus.COMPLETE
+    drawing.status = DrawingStatus.complete
     drawing.project = MagicMock()
     drawing.project.name = "Test Project"
     return drawing

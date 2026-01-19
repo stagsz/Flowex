@@ -162,7 +162,7 @@ def import_from_cloud(
                     original_filename=filename,
                     storage_path=storage_path,
                     file_size_bytes=len(content),
-                    status=DrawingStatus.UPLOADED,
+                    status=DrawingStatus.uploaded,
                 )
                 db.add(drawing)
                 db.commit()

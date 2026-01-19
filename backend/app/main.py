@@ -1,7 +1,9 @@
+import traceback
 from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.routes import auth, cloud, drawings, exports, projects
@@ -61,9 +63,6 @@ app = FastAPI(
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Handle all uncaught exceptions and ensure CORS headers are present."""
-    from fastapi.responses import JSONResponse
-    import traceback
-
     # Log the full error
     logger.error(f"Unhandled exception: {exc}\n{traceback.format_exc()}")
 

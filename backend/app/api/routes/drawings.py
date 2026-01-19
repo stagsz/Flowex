@@ -227,9 +227,9 @@ async def start_processing(
         raise HTTPException(status_code=403, detail="Access denied")
 
     # Check if already processing or complete
-    if drawing.status == DrawingStatus.PROCESSING:
+    if drawing.status == DrawingStatus.processing:
         raise HTTPException(status_code=400, detail="Drawing is already being processed")
-    if drawing.status == DrawingStatus.COMPLETE:
+    if drawing.status == DrawingStatus.complete:
         raise HTTPException(status_code=400, detail="Drawing has already been processed")
 
     # Queue the processing task
