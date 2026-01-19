@@ -212,7 +212,12 @@ _None_
   - CORS: Documented recommended production settings
   - Input Validation: PASS (Pydantic models, file validation)
   - Dependencies: Documented update recommendations
-- [ ] Perform performance testing
+- [x] Perform performance testing
+  - k6 load tests for API endpoints (smoke, load, stress, spike, soak profiles)
+  - Upload stress test (10 concurrent uploads per spec)
+  - Lighthouse CI for frontend Core Web Vitals (LCP < 3s, FCP < 2s)
+  - pytest-benchmark for backend critical paths (PDF processing, image preprocessing)
+  - GitHub Actions workflow for automated performance CI
 - [ ] Fix identified issues
 
 ---

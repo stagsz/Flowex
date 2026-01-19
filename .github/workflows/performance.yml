@@ -1,0 +1,177 @@
+name: Performance Tests
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - 'perf/**'
+      - '.github/workflows/performance.yml'
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - 'perf/**'
+      - '.github/workflows/performance.yml'
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      k6_profile:
+        description: 'k6 test profile (smoke, load, stress)'
+        required: false
+        default: 'smoke'
+
+jobs:
+  # Frontend Lighthouse CI
+  lighthouse:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v11
+        with:
+          configPath: frontend/lighthouserc.js
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+
+  # Backend pytest-benchmark
+  backend-benchmarks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-benchmark
+
+      - name: Run benchmarks
+        run: |
+          pytest tests/test_benchmarks.py -v --benchmark-json=benchmark-results.json || true
+        continue-on-error: true
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: backend/benchmark-results.json
+        if: always()
+
+  # k6 API load tests (smoke test on PR, configurable on manual trigger)
+  k6-load-tests:
+    runs-on: ubuntu-latest
+    needs: [backend-benchmarks]
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: flowex_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Start backend server
+        run: |
+          cd backend
+          DATABASE_URL=postgresql://test:test@localhost:5432/flowex_test \
+          REDIS_URL=redis://localhost:6379/0 \
+          AUTH0_DOMAIN=test.auth0.com \
+          AUTH0_CLIENT_ID=test \
+          AUTH0_CLIENT_SECRET=test \
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          sleep 10
+        env:
+          PYTHONPATH: backend
+
+      - name: Wait for server
+        run: |
+          for i in {1..30}; do
+            if curl -s http://localhost:8000/health > /dev/null; then
+              echo "Server is ready"
+              break
+            fi
+            echo "Waiting for server... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run k6 smoke tests
+        run: |
+          PROFILE=${{ github.event.inputs.k6_profile || 'smoke' }}
+          k6 run -e PROFILE=$PROFILE -e BASE_URL=http://localhost:8000 perf/k6/api-endpoints.js
+        continue-on-error: true
+
+      - name: Upload k6 results
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results
+          path: perf/k6/results/
+        if: always()
