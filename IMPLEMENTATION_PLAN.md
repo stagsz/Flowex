@@ -282,10 +282,15 @@ _None_
   - Structured logging module (JSON for production, colored for dev)
   - Request correlation IDs via X-Request-ID header middleware
   - CloudWatch log groups and alarms (configured in Terraform)
+- [x] Create Supabase deployment guide (no vendor lock-in alternative)
+  - See `docs/SUPABASE_DEPLOYMENT.md` for Supabase + Railway + Vercel stack
+  - Cost: $0-25/month vs $60-100/month for AWS
+  - Uses existing Supabase auth integration (AUTH_PROVIDER=supabase)
 - [ ] Deploy to staging
-  - See `docs/STAGING_DEPLOYMENT.md` for step-by-step checklist
-  - Requires: AWS account, Auth0 tenant, domain (flowex.io or custom)
-  - Requires: GitHub secrets and environment variables configuration
+  - **Option A (AWS):** See `docs/STAGING_DEPLOYMENT.md`
+    - Requires: AWS account, Auth0 tenant, domain
+  - **Option B (Supabase):** See `docs/SUPABASE_DEPLOYMENT.md`
+    - Requires: Supabase project, Railway account, Vercel account
 - [ ] Beta testing with pilot customers
 - [ ] Deploy to production
 
@@ -325,6 +330,11 @@ _None_
   - Consistent with UploadPage and DrawingsPage patterns
   - Ensures local development works without additional environment setup
 
+- [x] **Missing auth headers on frontend API calls** - `d15290a`
+  - Created centralized api.ts utility with automatic Bearer token injection
+  - Updated DrawingsPage, UploadPage, ValidationPage to use authenticated fetch
+  - Fixes authentication failures when backend validates JWT tokens
+
 ---
 
 ## Technical Decisions
@@ -336,6 +346,7 @@ _None_
 | Use ezdxf for CAD export | Open source, well-documented, sufficient for DXF generation | 2026-01-18 |
 | Start with synthetic training data | Faster iteration, no dependency on labeled real data initially | 2026-01-18 |
 | Add Supabase as auth alternative | Simpler setup for development, unified platform with storage, compatible with Auth0 | 2026-01-19 |
+| Add Supabase deployment option | No vendor lock-in, lower cost ($0-25 vs $60-100/mo), simpler setup for small teams | 2026-01-20 |
 
 ---
 
