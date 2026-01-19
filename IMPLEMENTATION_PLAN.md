@@ -305,6 +305,11 @@ _None_
   - Added type annotations to Celery task functions and middleware
   - Reduced mypy errors from 61 to 23 (remaining are cosmetic dict type params)
 
+- [x] **ValidationPage localhost fallback consistency** - `d4cd528`
+  - Added http://localhost:8000 fallback to VITE_API_URL in ValidationPage.tsx
+  - Consistent with UploadPage and DrawingsPage patterns
+  - Ensures local development works without additional environment setup
+
 ---
 
 ## Technical Decisions
