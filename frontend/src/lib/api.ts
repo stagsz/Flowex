@@ -1,0 +1,62 @@
+import { useAuthStore } from "@/stores/authStore"
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
+
+/**
+ * Authenticated fetch wrapper that automatically includes the auth token
+ * in API requests.
+ */
+export async function apiFetch(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<Response> {
+  const token = useAuthStore.getState().token
+
+  const headers: HeadersInit = {
+    ...options.headers,
+  }
+
+  // Add Authorization header if token exists
+  if (token) {
+    ;(headers as Record<string, string>)["Authorization"] = `Bearer ${token}`
+  }
+
+  // Add Content-Type for JSON bodies (but not for FormData)
+  if (options.body && !(options.body instanceof FormData)) {
+    ;(headers as Record<string, string>)["Content-Type"] = "application/json"
+  }
+
+  const url = endpoint.startsWith("http") ? endpoint : `${API_URL}${endpoint}`
+
+  return fetch(url, {
+    ...options,
+    headers,
+  })
+}
+
+/**
+ * Convenience methods for common HTTP operations
+ */
+export const api = {
+  get: (endpoint: string, options?: RequestInit) =>
+    apiFetch(endpoint, { ...options, method: "GET" }),
+
+  post: (endpoint: string, body?: unknown, options?: RequestInit) =>
+    apiFetch(endpoint, {
+      ...options,
+      method: "POST",
+      body: body instanceof FormData ? body : JSON.stringify(body),
+    }),
+
+  patch: (endpoint: string, body?: unknown, options?: RequestInit) =>
+    apiFetch(endpoint, {
+      ...options,
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  delete: (endpoint: string, options?: RequestInit) =>
+    apiFetch(endpoint, { ...options, method: "DELETE" }),
+}
+
+export { API_URL }

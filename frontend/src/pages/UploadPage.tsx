@@ -19,6 +19,7 @@ import {
   File,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { api } from "@/lib/api"
 
 interface UploadFile {
   id: string
@@ -42,13 +43,11 @@ export function UploadPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loadingProjects, setLoadingProjects] = useState(true)
 
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
   // Fetch projects from API
   useEffect(() => {
     async function fetchProjects() {
       try {
-        const response = await fetch(`${apiUrl}/api/v1/projects/`)
+        const response = await api.get("/api/v1/projects/")
         if (response.ok) {
           const data = await response.json()
           setProjects(data.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name })))
@@ -72,7 +71,7 @@ export function UploadPage() {
       }
     }
     fetchProjects()
-  }, [apiUrl])
+  }, [])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -141,13 +140,10 @@ export function UploadPage() {
         const formData = new FormData()
         formData.append("file", uploadFile.file)
 
-        // Upload to backend API
-        const response = await fetch(
-          `${apiUrl}/api/v1/drawings/upload/${selectedProject}`,
-          {
-            method: "POST",
-            body: formData,
-          }
+        // Upload to backend API (uses authenticated fetch)
+        const response = await api.post(
+          `/api/v1/drawings/upload/${selectedProject}`,
+          formData
         )
 
         setFiles((prev) =>

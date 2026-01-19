@@ -27,6 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { api } from "@/lib/api"
 
 interface Drawing {
   id: string
@@ -48,20 +49,18 @@ export function DrawingsPage() {
   const [drawings, setDrawings] = useState<Drawing[]>([])
   const [loading, setLoading] = useState(true)
 
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
   // Fetch drawings from API
   useEffect(() => {
     async function fetchDrawings() {
       try {
         // First fetch all projects, then get drawings for each
-        const projectsResponse = await fetch(`${apiUrl}/api/v1/projects/`)
+        const projectsResponse = await api.get("/api/v1/projects/")
         if (projectsResponse.ok) {
           const projects = await projectsResponse.json()
           const allDrawings: Drawing[] = []
 
           for (const project of projects) {
-            const drawingsResponse = await fetch(`${apiUrl}/api/v1/drawings/project/${project.id}`)
+            const drawingsResponse = await api.get(`/api/v1/drawings/project/${project.id}`)
             if (drawingsResponse.ok) {
               const projectDrawings = await drawingsResponse.json()
               for (const d of projectDrawings) {
@@ -93,7 +92,7 @@ export function DrawingsPage() {
       }
     }
     fetchDrawings()
-  }, [apiUrl])
+  }, [])
 
   const statusConfig = {
     uploaded: {

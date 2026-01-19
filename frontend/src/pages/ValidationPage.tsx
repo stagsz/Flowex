@@ -22,6 +22,7 @@ import {
   Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { api } from "@/lib/api"
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
@@ -72,8 +73,6 @@ export function ValidationPage() {
     projectName: "",
   })
 
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
   // Fetch drawing details and PDF URL
   useEffect(() => {
     async function fetchDrawing() {
@@ -81,7 +80,7 @@ export function ValidationPage() {
         setPdfLoading(true)
         setPdfError(null)
 
-        const response = await fetch(`${apiUrl}/api/v1/drawings/${drawingId}`)
+        const response = await api.get(`/api/v1/drawings/${drawingId}`)
         if (response.ok) {
           const data = await response.json()
           setDrawing({
@@ -111,7 +110,7 @@ export function ValidationPage() {
     if (drawingId) {
       fetchDrawing()
     }
-  }, [drawingId, apiUrl])
+  }, [drawingId])
 
   // Fetch symbols and text annotations
   useEffect(() => {
@@ -119,7 +118,7 @@ export function ValidationPage() {
       try {
         setSymbolsLoading(true)
 
-        const response = await fetch(`${apiUrl}/api/v1/drawings/${drawingId}/symbols`)
+        const response = await api.get(`/api/v1/drawings/${drawingId}/symbols`)
         if (response.ok) {
           const data = await response.json()
 
@@ -161,7 +160,7 @@ export function ValidationPage() {
     if (drawingId) {
       fetchSymbols()
     }
-  }, [drawingId, apiUrl])
+  }, [drawingId])
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages)
@@ -176,9 +175,8 @@ export function ValidationPage() {
   // Verify a symbol
   const verifySymbol = useCallback(async (symbolId: string) => {
     try {
-      const response = await fetch(
-        `${apiUrl}/api/v1/drawings/${drawingId}/symbols/${symbolId}/verify`,
-        { method: "POST" }
+      const response = await api.post(
+        `/api/v1/drawings/${drawingId}/symbols/${symbolId}/verify`
       )
       if (response.ok) {
         setSymbols(prev =>
@@ -188,18 +186,14 @@ export function ValidationPage() {
     } catch (err) {
       console.error("Failed to verify symbol:", err)
     }
-  }, [apiUrl, drawingId])
+  }, [drawingId])
 
   // Update symbol tag
   const updateSymbolTag = useCallback(async (symbolId: string, newTag: string) => {
     try {
-      const response = await fetch(
-        `${apiUrl}/api/v1/drawings/${drawingId}/symbols/${symbolId}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tag_number: newTag }),
-        }
+      const response = await api.patch(
+        `/api/v1/drawings/${drawingId}/symbols/${symbolId}`,
+        { tag_number: newTag }
       )
       if (response.ok) {
         setSymbols(prev =>
@@ -209,14 +203,13 @@ export function ValidationPage() {
     } catch (err) {
       console.error("Failed to update symbol:", err)
     }
-  }, [apiUrl, drawingId])
+  }, [drawingId])
 
   // Delete symbol (soft delete)
   const deleteSymbol = useCallback(async (symbolId: string) => {
     try {
-      const response = await fetch(
-        `${apiUrl}/api/v1/drawings/${drawingId}/symbols/${symbolId}`,
-        { method: "DELETE" }
+      const response = await api.delete(
+        `/api/v1/drawings/${drawingId}/symbols/${symbolId}`
       )
       if (response.ok) {
         setSymbols(prev => prev.filter(s => s.id !== symbolId))
@@ -225,7 +218,7 @@ export function ValidationPage() {
     } catch (err) {
       console.error("Failed to delete symbol:", err)
     }
-  }, [apiUrl, drawingId])
+  }, [drawingId])
 
   const filteredSymbols = symbols.filter((symbol) => {
     const matchesSearch = symbol.tag.toLowerCase().includes(searchQuery.toLowerCase())
