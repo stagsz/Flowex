@@ -22,18 +22,18 @@ ITERATION=0
 MODE=${1:-build}
 case $MODE in
     plan|planning)
-        PROMPT_FILE="PROMPT_plan.md"
+        PROMPT_FILE="PROMPT_Plan.md"
         echo -e "${BLUE}🗺️  PLANNING MODE${NC} - Generating/updating implementation plan"
         ;;
     build|building|"")
-        PROMPT_FILE="PROMPT_build.md"
+        PROMPT_FILE="PROMPT_Build.md"
         echo -e "${GREEN}🔨 BUILDING MODE${NC} - Implementing from plan"
         ;;
     *)
         # If first arg is a number, treat as max iterations for build mode
         if [[ $MODE =~ ^[0-9]+$ ]]; then
             MAX_ITERATIONS=$MODE
-            PROMPT_FILE="PROMPT_build.md"
+            PROMPT_FILE="PROMPT_Build.md"
             echo -e "${GREEN}🔨 BUILDING MODE${NC} - Max $MAX_ITERATIONS iterations"
         else
             echo -e "${RED}Unknown mode: $MODE${NC}"
