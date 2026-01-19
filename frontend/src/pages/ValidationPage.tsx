@@ -34,7 +34,7 @@ interface DetectedSymbol {
 export function ValidationPage() {
   const { drawingId } = useParams()
   const [zoom, setZoom] = useState(100)
-  const [rotation, setRotation] = useState(90) // Default 90° for landscape P&IDs
+  const [rotation, setRotation] = useState(0) // Default 0° - P&IDs are typically A1/A3 landscape
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterType, setFilterType] = useState("all")
@@ -138,8 +138,9 @@ export function ValidationPage() {
             <div
               className="bg-white shadow-lg mx-auto relative transition-transform duration-300"
               style={{
-                width: `${(rotation % 180 === 0 ? 600 : 800) * (zoom / 100)}px`,
-                height: `${(rotation % 180 === 0 ? 800 : 600) * (zoom / 100)}px`,
+                // A1/A3 aspect ratio (1.414:1) - landscape by default
+                width: `${(rotation % 180 === 0 ? 840 : 594) * (zoom / 100)}px`,
+                height: `${(rotation % 180 === 0 ? 594 : 840) * (zoom / 100)}px`,
                 transform: `rotate(${rotation}deg)`,
                 transformOrigin: 'center center',
               }}
