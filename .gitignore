@@ -68,3 +68,8 @@ images/*.jpg
 images/*.jpeg
 images/*.gif
 images/*.svg
+
+# Test outputs
+frontend/playwright-report/
+frontend/test-results/
+frontend/npm-output.txt
