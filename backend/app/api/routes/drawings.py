@@ -1,12 +1,12 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
-from app.models import Drawing, Project, User
+from app.models import Drawing, DrawingStatus, Project, User
 from app.services import drawings as drawing_service
 from app.services.drawings import FileValidationError
 
@@ -202,3 +202,77 @@ async def delete_drawing(
         raise HTTPException(status_code=403, detail="Access denied")
 
     await drawing_service.delete_drawing(db, drawing)
+
+
+class ProcessingResponse(BaseModel):
+    drawing_id: str
+    task_id: str
+    status: str
+    message: str
+
+
+@router.post("/{drawing_id}/process", response_model=ProcessingResponse)
+async def start_processing(
+    drawing_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> ProcessingResponse:
+    """Start processing a drawing (PDF to images, preprocessing)."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Check if already processing or complete
+    if drawing.status == DrawingStatus.PROCESSING:
+        raise HTTPException(status_code=400, detail="Drawing is already being processed")
+    if drawing.status == DrawingStatus.COMPLETE:
+        raise HTTPException(status_code=400, detail="Drawing has already been processed")
+
+    # Queue the processing task
+    from app.tasks.processing import process_drawing
+
+    task = process_drawing.delay(str(drawing_id))
+
+    return ProcessingResponse(
+        drawing_id=str(drawing_id),
+        task_id=task.id,
+        status="queued",
+        message="Processing task has been queued",
+    )
+
+
+@router.get("/{drawing_id}/process/status")
+async def get_processing_status(
+    drawing_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """Get the processing status of a drawing."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    return {
+        "drawing_id": str(drawing_id),
+        "status": drawing.status.value,
+        "file_type": drawing.file_type.value if drawing.file_type else None,
+        "error_message": drawing.error_message,
+        "processing_started_at": (
+            drawing.processing_started_at.isoformat() if drawing.processing_started_at else None
+        ),
+        "processing_completed_at": (
+            drawing.processing_completed_at.isoformat()
+            if drawing.processing_completed_at
+            else None
+        ),
+    }

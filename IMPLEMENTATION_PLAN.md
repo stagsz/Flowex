@@ -57,11 +57,21 @@
 - [x] Create drawings API routes (upload, list, get, delete)
 - [x] Write file validation tests
 
+### Phase 2.2 PDF Processing Pipeline
+- [x] Set up Celery app with Redis broker
+- [x] Create PDF processing task (process_drawing)
+- [x] Implement PDF type detection (vector vs scanned)
+- [x] Implement PDF to image conversion (PyMuPDF)
+- [x] Implement image preprocessing for scanned PDFs (grayscale, contrast, binarization)
+- [x] Implement image tiling for AI processing
+- [x] Add processing API endpoints (start, status)
+- [x] Write processing pipeline tests
+
 ---
 
 ## In Progress
 
-### Phase 2.2 PDF Processing Pipeline
+### Phase 3: AI/ML Pipeline
 
 ---
 
