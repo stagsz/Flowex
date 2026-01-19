@@ -319,3 +319,49 @@ resource "aws_appautoscaling_policy" "backend_memory" {
     scale_out_cooldown = 60
   }
 }
+
+# -----------------------------------------------------------------------------
+# Migration Task Definition
+# One-off task for running database migrations (Alembic)
+# -----------------------------------------------------------------------------
+
+resource "aws_ecs_task_definition" "migration" {
+  family                   = "${local.name_prefix}-migration"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.ecs_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name    = "migration"
+      image   = "${aws_ecr_repository.backend.repository_url}:latest"
+      command = ["alembic", "upgrade", "head"]
+
+      environment = [
+        { name = "ENVIRONMENT", value = var.environment }
+      ]
+
+      secrets = [
+        { name = "DATABASE_URL", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:DATABASE_URL::" }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.backend.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "migration"
+        }
+      }
+
+      essential = true
+    }
+  ])
+
+  tags = {
+    Name = "${local.name_prefix}-migration-task"
+  }
+}
