@@ -20,7 +20,6 @@ out/
 .env.local
 .env.*.local
 *.local
-.env.example
 
 # IDE
 .idea/

@@ -83,22 +83,17 @@ while true; do
     # --model: specify model (opus for complex tasks, sonnet for speed)
 
     LOG_FILE="ralph_log_$(date '+%Y%m%d').txt"
-    TEMP_OUTPUT=$(mktemp)
 
     echo "Starting Claude at $(date '+%H:%M:%S')..." | tee -a "$LOG_FILE"
 
-    # Run Claude with prompt from stdin (handles long prompts correctly)
+    # Run Claude with prompt from stdin, stream output to both console and log in real-time
     claude -p \
         --dangerously-skip-permissions \
         --model "$DEFAULT_MODEL" \
         --verbose \
-        < "$PROMPT_FILE" > "$TEMP_OUTPUT" 2>&1
+        < "$PROMPT_FILE" 2>&1 | tee -a "$LOG_FILE"
 
-    EXIT_CODE=$?
-
-    # Display and log output
-    cat "$TEMP_OUTPUT" | tee -a "$LOG_FILE"
-    rm -f "$TEMP_OUTPUT"
+    EXIT_CODE=${PIPESTATUS[0]}
 
     echo "Claude finished at $(date '+%H:%M:%S') with exit code $EXIT_CODE" | tee -a "$LOG_FILE"
 
