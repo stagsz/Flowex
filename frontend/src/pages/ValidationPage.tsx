@@ -12,7 +12,6 @@ import {
   ZoomOut,
   RotateCw,
   Download,
-  Save,
   Undo,
   Redo,
   Search,
@@ -21,9 +20,15 @@ import {
   Filter,
   Loader2,
   Keyboard,
+  Cloud,
+  CloudOff,
+  Check,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
+
+// Save status types
+type SaveStatus = "idle" | "saving" | "saved" | "error"
 
 // Undo/Redo action types
 interface EditAction {
@@ -71,6 +76,50 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
   )
 }
 
+// Save status indicator component
+function SaveStatusIndicator({
+  status,
+  lastSavedAt,
+  formatLastSaved
+}: {
+  status: SaveStatus
+  lastSavedAt: Date | null
+  formatLastSaved: (date: Date | null) => string
+}) {
+  if (status === "idle" && !lastSavedAt) {
+    return null
+  }
+
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      {status === "saving" && (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          <span className="text-muted-foreground">Saving...</span>
+        </>
+      )}
+      {status === "saved" && (
+        <>
+          <Check className="h-4 w-4 text-green-500" />
+          <span className="text-green-600">Saved</span>
+        </>
+      )}
+      {status === "error" && (
+        <>
+          <CloudOff className="h-4 w-4 text-red-500" />
+          <span className="text-red-600">Save failed</span>
+        </>
+      )}
+      {status === "idle" && lastSavedAt && (
+        <>
+          <Cloud className="h-4 w-4 text-muted-foreground" />
+          <span className="text-muted-foreground">Saved {formatLastSaved(lastSavedAt)}</span>
+        </>
+      )}
+    </div>
+  )
+}
+
 // Keyboard shortcuts help dialog
 function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
   const shortcuts = [
@@ -78,7 +127,7 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
     { key: "Delete / Backspace", action: "Delete selected item" },
     { key: "Ctrl + Z", action: "Undo last action" },
     { key: "Ctrl + Y", action: "Redo last action" },
-    { key: "Ctrl + S", action: "Save (show saved status)" },
+    { key: "Ctrl + S", action: "Show save status (auto-saved)" },
     { key: "+ / =", action: "Zoom in" },
     { key: "- / _", action: "Zoom out" },
     { key: "Tab", action: "Select next item" },
@@ -137,8 +186,48 @@ export function ValidationPage() {
   const [toast, setToast] = useState<string | null>(null)
   const showToast = useCallback((message: string) => setToast(message), [])
 
+  // Mark save as started (show "Saving..." indicator)
+  const markSaving = useCallback(() => {
+    setSaveStatus("saving")
+    // Clear any existing timeout to reset the "saved" duration
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+  }, [])
+
+  // Mark save as completed (show "Saved" then fade to idle)
+  const markSaved = useCallback(() => {
+    setSaveStatus("saved")
+    setLastSavedAt(new Date())
+    // Reset to idle after 3 seconds
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+    saveTimeoutRef.current = setTimeout(() => {
+      setSaveStatus("idle")
+    }, 3000)
+  }, [])
+
+  // Mark save as failed
+  const markSaveError = useCallback(() => {
+    setSaveStatus("error")
+    // Reset to idle after 5 seconds
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+    saveTimeoutRef.current = setTimeout(() => {
+      setSaveStatus("idle")
+    }, 5000)
+  }, [])
+
   // Keyboard shortcuts help
   const [showHelp, setShowHelp] = useState(false)
+
+  // Auto-save status tracking
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle")
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // Ref for focus management
   const containerRef = useRef<HTMLDivElement>(null)
@@ -265,6 +354,7 @@ export function ValidationPage() {
     const symbol = symbols.find(s => s.id === symbolId)
     if (!symbol || symbol.validated) return
 
+    markSaving()
     try {
       const response = await api.post(
         `/api/v1/drawings/${drawingId}/symbols/${symbolId}/verify`
@@ -285,16 +375,22 @@ export function ValidationPage() {
         setSymbols(prev =>
           prev.map(s => s.id === symbolId ? { ...s, validated: true } : s)
         )
+        markSaved()
         showToast(`Verified: ${symbol.tag}`)
+      } else {
+        markSaveError()
+        showToast("Failed to verify symbol")
       }
     } catch (err) {
       console.error("Failed to verify symbol:", err)
+      markSaveError()
       showToast("Failed to verify symbol")
     }
-  }, [drawingId, symbols, pushToUndoStack, showToast])
+  }, [drawingId, symbols, pushToUndoStack, showToast, markSaving, markSaved, markSaveError])
 
   // Unverify a symbol (for undo)
   const unverifySymbol = useCallback(async (symbolId: string) => {
+    markSaving()
     try {
       const response = await api.patch(
         `/api/v1/drawings/${drawingId}/symbols/${symbolId}`,
@@ -304,17 +400,22 @@ export function ValidationPage() {
         setSymbols(prev =>
           prev.map(s => s.id === symbolId ? { ...s, validated: false } : s)
         )
+        markSaved()
+      } else {
+        markSaveError()
       }
     } catch (err) {
       console.error("Failed to unverify symbol:", err)
+      markSaveError()
     }
-  }, [drawingId])
+  }, [drawingId, markSaving, markSaved, markSaveError])
 
   // Update symbol tag
   const updateSymbolTag = useCallback(async (symbolId: string, newTag: string, skipUndo = false) => {
     const symbol = symbols.find(s => s.id === symbolId)
     if (!symbol || symbol.tag === newTag) return
 
+    markSaving()
     try {
       const response = await api.patch(
         `/api/v1/drawings/${drawingId}/symbols/${symbolId}`,
@@ -333,18 +434,24 @@ export function ValidationPage() {
         setSymbols(prev =>
           prev.map(s => s.id === symbolId ? { ...s, tag: newTag } : s)
         )
+        markSaved()
+      } else {
+        markSaveError()
+        showToast("Failed to update tag")
       }
     } catch (err) {
       console.error("Failed to update symbol:", err)
+      markSaveError()
       showToast("Failed to update tag")
     }
-  }, [drawingId, symbols, pushToUndoStack, showToast])
+  }, [drawingId, symbols, pushToUndoStack, showToast, markSaving, markSaved, markSaveError])
 
   // Delete symbol (soft delete)
   const deleteSymbol = useCallback(async (symbolId: string, skipUndo = false) => {
     const symbol = symbols.find(s => s.id === symbolId)
     if (!symbol) return
 
+    markSaving()
     try {
       const response = await api.delete(
         `/api/v1/drawings/${drawingId}/symbols/${symbolId}`
@@ -361,16 +468,22 @@ export function ValidationPage() {
 
         setSymbols(prev => prev.filter(s => s.id !== symbolId))
         setSelectedSymbol(null)
+        markSaved()
         showToast(`Deleted: ${symbol.tag}`)
+      } else {
+        markSaveError()
+        showToast("Failed to delete symbol")
       }
     } catch (err) {
       console.error("Failed to delete symbol:", err)
+      markSaveError()
       showToast("Failed to delete symbol")
     }
-  }, [drawingId, symbols, pushToUndoStack, showToast])
+  }, [drawingId, symbols, pushToUndoStack, showToast, markSaving, markSaved, markSaveError])
 
   // Restore a deleted symbol (for undo)
   const restoreSymbol = useCallback(async (symbol: DetectedSymbol) => {
+    markSaving()
     try {
       // Re-create the symbol via API
       const response = await api.post(
@@ -394,12 +507,17 @@ export function ValidationPage() {
           ...symbol,
           id: data.id || symbol.id,
         }])
+        markSaved()
+      } else {
+        markSaveError()
+        showToast("Failed to restore symbol")
       }
     } catch (err) {
       console.error("Failed to restore symbol:", err)
+      markSaveError()
       showToast("Failed to restore symbol")
     }
-  }, [drawingId, showToast])
+  }, [drawingId, showToast, markSaving, markSaved, markSaveError])
 
   // Undo last action
   const undo = useCallback(async () => {
@@ -557,7 +675,12 @@ export function ValidationPage() {
             return
           case "s":
             e.preventDefault()
-            showToast("All changes saved")
+            // Changes are auto-saved, just show the status
+            if (lastSavedAt) {
+              showToast(`All changes saved (last save: ${formatLastSaved(lastSavedAt)})`)
+            } else {
+              showToast("All changes are automatically saved")
+            }
             return
         }
       }
@@ -610,11 +733,37 @@ export function ValidationPage() {
     selectNextSymbol,
     selectPrevSymbol,
     showToast,
+    lastSavedAt,
+    formatLastSaved,
   ])
 
   // Focus container for keyboard events
   useEffect(() => {
     containerRef.current?.focus()
+  }, [])
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+      if (autoSaveIntervalRef.current) {
+        clearInterval(autoSaveIntervalRef.current)
+      }
+    }
+  }, [])
+
+  // Format relative time for last saved display
+  const formatLastSaved = useCallback((date: Date | null): string => {
+    if (!date) return ""
+    const now = new Date()
+    const diffSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+    if (diffSeconds < 5) return "just now"
+    if (diffSeconds < 60) return `${diffSeconds}s ago`
+    const diffMinutes = Math.floor(diffSeconds / 60)
+    if (diffMinutes < 60) return `${diffMinutes}m ago`
+    return date.toLocaleTimeString()
   }, [])
 
   return (
@@ -638,49 +787,54 @@ export function ValidationPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={undo}
-            disabled={undoStack.length === 0}
-            title="Undo (Ctrl+Z)"
-          >
-            <Undo className="h-4 w-4 mr-1" />
-            Undo
-            {undoStack.length > 0 && (
-              <span className="ml-1 text-xs text-muted-foreground">({undoStack.length})</span>
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={redo}
-            disabled={redoStack.length === 0}
-            title="Redo (Ctrl+Y)"
-          >
-            <Redo className="h-4 w-4 mr-1" />
-            Redo
-            {redoStack.length > 0 && (
-              <span className="ml-1 text-xs text-muted-foreground">({redoStack.length})</span>
-            )}
-          </Button>
-          <Button variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-1" />
-            Export
-          </Button>
-          <Button size="sm" onClick={() => showToast("All changes saved")} title="Save (Ctrl+S)">
-            <Save className="h-4 w-4 mr-1" />
-            Save
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setShowHelp(true)}
-            title="Keyboard shortcuts (?)"
-          >
-            <Keyboard className="h-4 w-4" />
-          </Button>
+        <div className="flex items-center gap-4">
+          {/* Save status indicator */}
+          <SaveStatusIndicator
+            status={saveStatus}
+            lastSavedAt={lastSavedAt}
+            formatLastSaved={formatLastSaved}
+          />
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={undo}
+              disabled={undoStack.length === 0}
+              title="Undo (Ctrl+Z)"
+            >
+              <Undo className="h-4 w-4 mr-1" />
+              Undo
+              {undoStack.length > 0 && (
+                <span className="ml-1 text-xs text-muted-foreground">({undoStack.length})</span>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={redo}
+              disabled={redoStack.length === 0}
+              title="Redo (Ctrl+Y)"
+            >
+              <Redo className="h-4 w-4 mr-1" />
+              Redo
+              {redoStack.length > 0 && (
+                <span className="ml-1 text-xs text-muted-foreground">({redoStack.length})</span>
+              )}
+            </Button>
+            <Button variant="outline" size="sm">
+              <Download className="h-4 w-4 mr-1" />
+              Export
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowHelp(true)}
+              title="Keyboard shortcuts (?)"
+            >
+              <Keyboard className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
