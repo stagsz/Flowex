@@ -82,7 +82,7 @@ class Settings(BaseSettings):
     SUPABASE_JWT_SECRET: str = ""  # JWT secret from Supabase dashboard (Settings > API)
 
     # ML Model Configuration
-    ML_MODEL_BUCKET: str = "models"  # Supabase bucket for ML models
+    ML_MODEL_BUCKET: str = "symbol_detector.pt"  # Supabase bucket for ML models
     ML_MODEL_PATH: str = "symbol_detector_mobile.pt"  # Path to model in bucket
     ML_MODEL_LOCAL_PATH: str = "/tmp/symbol_detector.pt"  # Local cache path
 
