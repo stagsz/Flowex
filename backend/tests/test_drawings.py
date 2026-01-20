@@ -1,10 +1,15 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.routes.drawings import BulkVerifyRequest, BulkVerifyResponse
+from app.api.routes.drawings import (
+    BulkVerifyRequest,
+    BulkVerifyResponse,
+    TitleBlockResponse,
+    _extract_title_block_from_texts,
+)
 from app.main import app
 from app.services.drawings import (
     MAX_FILE_SIZE,
@@ -181,4 +186,222 @@ class TestBulkVerifyEndpoint:
             json={"symbol_ids": []},
         )
         # Should return 403 (Forbidden) without auth
+        assert response.status_code == 403
+
+
+class TestTitleBlockExtraction:
+    """Tests for title block extraction functionality."""
+
+    def _make_mock_text(
+        self,
+        content: str,
+        bbox_x: float = 600.0,
+        bbox_y: float = 500.0,
+        bbox_width: float = 50.0,
+        bbox_height: float = 12.0,
+        is_deleted: bool = False,
+    ) -> MagicMock:
+        """Create a mock TextAnnotation object."""
+        mock = MagicMock()
+        mock.text_content = content
+        mock.bbox_x = bbox_x
+        mock.bbox_y = bbox_y
+        mock.bbox_width = bbox_width
+        mock.bbox_height = bbox_height
+        mock.is_deleted = is_deleted
+        return mock
+
+    def test_extract_drawing_number(self):
+        """Test extraction of drawing number from text."""
+        texts = [
+            self._make_mock_text("DWG-12345", 700, 500),
+            self._make_mock_text("Some other text", 100, 100),
+        ]
+        result = _extract_title_block_from_texts(texts)
+        assert result.drawing_number == "12345"
+
+    def test_extract_drawing_number_pid_format(self):
+        """Test extraction of P&ID drawing number format."""
+        texts = [self._make_mock_text("P&ID-001", 700, 500)]
+        result = _extract_title_block_from_texts(texts)
+        assert result.drawing_number == "001"
+
+    def test_extract_revision(self):
+        """Test extraction of revision from text."""
+        texts = [self._make_mock_text("REV A", 700, 500)]
+        result = _extract_title_block_from_texts(texts)
+        assert result.revision == "A"
+
+    def test_extract_revision_variation(self):
+        """Test extraction of revision with different format."""
+        texts = [self._make_mock_text("REVISION: 2", 700, 500)]
+        result = _extract_title_block_from_texts(texts)
+        assert result.revision == "2"
+
+    def test_extract_scale(self):
+        """Test extraction of scale from text."""
+        texts = [self._make_mock_text("SCALE: 1:50", 700, 500)]
+        result = _extract_title_block_from_texts(texts)
+        assert result.scale is not None
+        assert "1" in result.scale and "50" in result.scale
+
+    def test_extract_scale_simple(self):
+        """Test extraction of simple scale format."""
+        texts = [self._make_mock_text("1:100", 700, 500)]
+        result = _extract_title_block_from_texts(texts)
+        assert result.scale == "1:100"
+
+    def test_extract_date_slash_format(self):
+        """Test extraction of date with slash format."""
+        texts = [self._make_mock_text("15/12/2025", 700, 500)]
+        result = _extract_title_block_from_texts(texts)
+        assert result.date == "15/12/2025"
+
+    def test_extract_date_dash_format(self):
+        """Test extraction of date with ISO dash format (YYYY-MM-DD)."""
+        texts = [self._make_mock_text("2025-12-15", 700, 500)]
+        result = _extract_title_block_from_texts(texts)
+        assert result.date == "2025-12-15"
+
+    def test_extract_date_short_year(self):
+        """Test extraction of date with short year format."""
+        texts = [self._make_mock_text("15-12-25", 700, 500)]
+        result = _extract_title_block_from_texts(texts)
+        assert result.date == "15-12-25"
+
+    def test_extract_sheet(self):
+        """Test extraction of sheet number."""
+        texts = [self._make_mock_text("SHEET 1 OF 5", 700, 500)]
+        result = _extract_title_block_from_texts(texts)
+        assert result.sheet is not None
+        assert "1" in result.sheet
+
+    def test_extract_drawn_by(self):
+        """Test extraction of drawn by field."""
+        texts = [self._make_mock_text("DRAWN: JMS", 700, 500)]
+        result = _extract_title_block_from_texts(texts)
+        assert result.drawn_by == "JMS"
+
+    def test_extract_checked_by(self):
+        """Test extraction of checked by field."""
+        texts = [self._make_mock_text("CHECKED: KLR", 700, 500)]
+        result = _extract_title_block_from_texts(texts)
+        assert result.checked_by == "KLR"
+
+    def test_extract_approved_by(self):
+        """Test extraction of approved by field."""
+        texts = [self._make_mock_text("APPROVED: ABC", 700, 500)]
+        result = _extract_title_block_from_texts(texts)
+        assert result.approved_by == "ABC"
+
+    def test_extract_project_name(self):
+        """Test extraction of project name."""
+        texts = [self._make_mock_text("PROJECT: WtE Plant Alpha", 700, 500)]
+        result = _extract_title_block_from_texts(texts)
+        assert result.project_name is not None
+        assert "WtE" in result.project_name or "Alpha" in result.project_name
+
+    def test_extract_title_longest_text(self):
+        """Test that title is extracted as the longest non-keyword text."""
+        texts = [
+            self._make_mock_text("REV A", 700, 500),
+            self._make_mock_text("Process Area 100 - Feed System Overview", 700, 510),
+            self._make_mock_text("1:50", 700, 520),
+        ]
+        result = _extract_title_block_from_texts(texts)
+        assert result.title == "Process Area 100 - Feed System Overview"
+
+    def test_empty_texts_list(self):
+        """Test extraction with empty texts list."""
+        result = _extract_title_block_from_texts([])
+        assert result.texts_analyzed == 0
+        assert result.extraction_confidence == 0.0
+        assert result.drawing_number is None
+
+    def test_deleted_texts_excluded(self):
+        """Test that deleted texts are excluded from analysis."""
+        texts = [
+            self._make_mock_text("DWG-12345", 700, 500, is_deleted=True),
+            self._make_mock_text("No pattern here", 700, 510),
+        ]
+        result = _extract_title_block_from_texts(texts)
+        # The deleted text with the drawing number should not be found
+        assert result.drawing_number is None
+
+    def test_texts_outside_title_block_region_fallback(self):
+        """Test that texts outside title block region are still analyzed as fallback."""
+        # Text at top-left (outside title block region)
+        texts = [self._make_mock_text("DWG-99999", 50, 50)]
+        result = _extract_title_block_from_texts(texts)
+        # Should still find it via fallback
+        assert result.drawing_number == "99999"
+
+    def test_multiple_fields_extraction(self):
+        """Test extraction of multiple fields from various texts."""
+        texts = [
+            self._make_mock_text("P&ID-001", 700, 500),
+            self._make_mock_text("REV B", 700, 510),
+            self._make_mock_text("SCALE: 1:50", 700, 520),
+            self._make_mock_text("DRAWN: JMS", 700, 530),
+            self._make_mock_text("15/01/2026", 700, 540),
+        ]
+        result = _extract_title_block_from_texts(texts)
+        assert result.drawing_number == "001"
+        assert result.revision == "B"
+        assert result.scale is not None
+        assert result.drawn_by == "JMS"
+        assert result.date == "15/01/2026"
+        assert result.extraction_confidence > 0
+
+    def test_extraction_confidence_calculation(self):
+        """Test that extraction confidence is calculated correctly."""
+        # All fields found
+        texts = [
+            self._make_mock_text("DWG-001", 700, 500),
+            self._make_mock_text("REV A", 700, 510),
+            self._make_mock_text("1:50", 700, 520),
+            self._make_mock_text("15/01/2026", 700, 530),
+            self._make_mock_text("SHEET 1 OF 1", 700, 540),
+            self._make_mock_text("DRAWN: JMS", 700, 550),
+            self._make_mock_text("CHECKED: KLR", 700, 560),
+            self._make_mock_text("APPROVED: ABC", 700, 570),
+        ]
+        result = _extract_title_block_from_texts(texts)
+        assert result.extraction_confidence > 0.5
+
+    def test_response_model_structure(self):
+        """Test TitleBlockResponse model has correct structure."""
+        response = TitleBlockResponse(
+            drawing_number="DWG-001",
+            revision="A",
+            title="Test Title",
+            project_name="Test Project",
+            date="2026-01-15",
+            scale="1:50",
+            drawn_by="JMS",
+            checked_by="KLR",
+            approved_by="ABC",
+            sheet="1 OF 1",
+            extraction_confidence=0.8,
+            texts_analyzed=10,
+        )
+        assert response.drawing_number == "DWG-001"
+        assert response.revision == "A"
+        assert response.extraction_confidence == 0.8
+
+
+class TestTitleBlockEndpoint:
+    """Tests for title block API endpoint authentication and access control."""
+
+    def test_title_block_requires_auth(self):
+        """Test title block endpoint requires authentication."""
+        drawing_id = str(uuid4())
+        response = client.get(f"/api/v1/drawings/{drawing_id}/title-block")
+        # Should return 403 (Forbidden) without auth
+        assert response.status_code == 403
+
+    def test_title_block_invalid_drawing_id_requires_auth(self):
+        """Test title block with invalid drawing ID requires auth first."""
+        response = client.get("/api/v1/drawings/invalid-uuid/title-block")
+        # Auth check happens before validation, so returns 403
         assert response.status_code == 403

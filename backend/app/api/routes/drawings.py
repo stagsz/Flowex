@@ -951,3 +951,225 @@ async def bulk_unflag_symbols(
         flagged_ids=unflagged_ids,
         failed_ids=failed_ids,
     )
+
+
+# Title block extraction models and endpoint
+class TitleBlockResponse(BaseModel):
+    """Title block information extracted from the drawing."""
+
+    drawing_number: str | None = None
+    revision: str | None = None
+    title: str | None = None
+    project_name: str | None = None
+    date: str | None = None
+    scale: str | None = None
+    drawn_by: str | None = None
+    checked_by: str | None = None
+    approved_by: str | None = None
+    sheet: str | None = None
+    # Source info for debugging/verification
+    extraction_confidence: float = 0.0
+    texts_analyzed: int = 0
+
+
+def _extract_title_block_from_texts(
+    texts: list[TextAnnotation],
+    image_width: float = 841.0,  # A1 landscape width in mm
+    image_height: float = 594.0,  # A1 landscape height in mm
+) -> TitleBlockResponse:
+    """
+    Extract title block information from text annotations.
+
+    Title blocks are typically in the bottom-right corner of the drawing.
+    Uses position-based filtering and pattern matching to identify fields.
+    """
+    import re
+
+    # Filter texts in the title block region (bottom-right quadrant)
+    # Title blocks are typically in the bottom 20% and right 40% of the drawing
+    title_block_texts = []
+    for text in texts:
+        if text.is_deleted:
+            continue
+        # Check if text is in title block region
+        x_ratio = text.bbox_x / image_width if image_width > 0 else 0
+        y_ratio = text.bbox_y / image_height if image_height > 0 else 0
+
+        # Title block region: right 40%, bottom 25%
+        if x_ratio >= 0.60 and y_ratio >= 0.75:
+            title_block_texts.append(text)
+
+    if not title_block_texts:
+        # Fallback: look at all texts and try pattern matching
+        title_block_texts = [t for t in texts if not t.is_deleted]
+
+    # Initialize result
+    result = TitleBlockResponse(texts_analyzed=len(title_block_texts))
+
+    if not title_block_texts:
+        return result
+
+    # Patterns for common title block fields
+    patterns = {
+        # Drawing number patterns (e.g., P&ID-001, DWG-12345, 100-PID-001)
+        "drawing_number": [
+            r"(?:P&ID|PID|DWG|DRAWING)[-\s]?(\d{3,6}[A-Z]?)",
+            r"(\d{2,3}[-/]\w{3,4}[-/]\d{3,6})",
+            r"^([A-Z]{2,4}[-/]\d{3,6}[A-Z]?)$",
+        ],
+        # Revision patterns (e.g., REV A, R1, REVISION 2)
+        # Note: Must use word boundary to avoid matching partial words like DRAWN
+        "revision": [
+            r"\bREV(?:ISION)?[\s.:]*([A-Z0-9]{1,3})\b",
+            r"^REV\s+([A-Z0-9]{1,3})$",
+            r"^([A-Z])$",  # Single letter revision (entire text is just one letter)
+        ],
+        # Scale patterns (e.g., 1:50, SCALE: 1/100)
+        "scale": [
+            r"(?:SCALE)?[\s.:]*(\d+\s*[:/]\s*\d+)",
+            r"^(\d+:\d+)$",
+        ],
+        # Date patterns (various formats) - order matters: 4-digit year first
+        "date": [
+            r"(\d{4}[-/]\d{1,2}[-/]\d{1,2})",  # ISO format: 2025-12-15
+            r"(\d{1,2}[-/]\d{1,2}[-/]\d{4})",  # DD/MM/YYYY or MM/DD/YYYY
+            r"(\d{1,2}[-/]\d{1,2}[-/]\d{2})",  # Short year: 15/12/25
+            r"(?:DATE)?[\s.:]*(\d{1,2}\s+\w{3,9}\s+\d{4})",  # 15 January 2025
+        ],
+        # Sheet patterns (e.g., SHEET 1 OF 5, 1/5)
+        "sheet": [
+            r"(?:SHEET|SH)[\s.:]*(\d+\s*(?:OF|/)\s*\d+)",
+            r"^(\d+\s*/\s*\d+)$",
+        ],
+    }
+
+    # Personnel patterns with field prefixes
+    personnel_patterns = {
+        "drawn_by": [
+            r"(?:DRAWN|DRAFTED|DRN|BY)[\s.:]*([A-Z]{2,4})",
+            r"(?:DRAWN|DRAFTED|DRN|BY)[\s.:]*([A-Za-z\s]{2,20})",
+        ],
+        "checked_by": [
+            r"(?:CHECKED|CHK|CK)[\s.:]*([A-Z]{2,4})",
+            r"(?:CHECKED|CHK|CK)[\s.:]*([A-Za-z\s]{2,20})",
+        ],
+        "approved_by": [
+            r"(?:APPROVED|APPR|APP|APR)[\s.:]*([A-Z]{2,4})",
+            r"(?:APPROVED|APPR|APP|APR)[\s.:]*([A-Za-z\s]{2,20})",
+        ],
+    }
+
+    # Sort texts by position (bottom to top, right to left) for better matching
+    sorted_texts = sorted(
+        title_block_texts,
+        key=lambda t: (-t.bbox_y, -t.bbox_x),
+    )
+
+    matched_fields = 0
+    total_patterns = len(patterns) + len(personnel_patterns)
+
+    # Extract using patterns
+    for text in sorted_texts:
+        content = text.text_content.strip().upper()
+
+        # Try each pattern category
+        for field, pattern_list in patterns.items():
+            if getattr(result, field) is not None:
+                continue  # Already found
+            for pattern in pattern_list:
+                match = re.search(pattern, content, re.IGNORECASE)
+                if match:
+                    setattr(result, field, match.group(1).strip())
+                    matched_fields += 1
+                    break
+
+        for field, pattern_list in personnel_patterns.items():
+            if getattr(result, field) is not None:
+                continue
+            for pattern in pattern_list:
+                match = re.search(pattern, content, re.IGNORECASE)
+                if match:
+                    setattr(result, field, match.group(1).strip())
+                    matched_fields += 1
+                    break
+
+    # Look for title (usually the longest text in the title block area)
+    if result.title is None:
+        potential_titles = [
+            t.text_content
+            for t in title_block_texts
+            if len(t.text_content) > 10
+            and not any(
+                kw in t.text_content.upper()
+                for kw in ["SCALE", "REV", "DATE", "SHEET", "DRAWN", "CHECKED", "APPR"]
+            )
+        ]
+        if potential_titles:
+            # Take the longest one as the title
+            result.title = max(potential_titles, key=len)
+            matched_fields += 1
+
+    # Look for project name (often contains "PROJECT" or similar)
+    if result.project_name is None:
+        for text in title_block_texts:
+            content = text.text_content.upper()
+            if "PROJECT" in content or "PLANT" in content or "FACILITY" in content:
+                # Extract the value after the keyword
+                for kw in ["PROJECT:", "PROJECT", "PLANT:", "PLANT"]:
+                    if kw in content:
+                        idx = content.find(kw) + len(kw)
+                        result.project_name = text.text_content[idx:].strip()
+                        matched_fields += 1
+                        break
+                if result.project_name:
+                    break
+
+    # Calculate extraction confidence
+    result.extraction_confidence = matched_fields / total_patterns if total_patterns > 0 else 0.0
+
+    return result
+
+
+@router.get("/{drawing_id}/title-block", response_model=TitleBlockResponse)
+async def get_title_block(
+    drawing_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TitleBlockResponse:
+    """
+    Extract title block information from a drawing.
+
+    Analyzes text annotations in the title block region (typically bottom-right)
+    and uses pattern matching to extract structured fields like drawing number,
+    revision, title, project name, date, scale, and personnel signatures.
+
+    Returns extracted fields with an extraction confidence score.
+    """
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Check if drawing has been processed
+    if drawing.status not in [DrawingStatus.review, DrawingStatus.complete]:
+        raise HTTPException(
+            status_code=400,
+            detail="Drawing must be processed before title block can be extracted",
+        )
+
+    # Get all text annotations for this drawing
+    texts = (
+        db.query(TextAnnotation)
+        .filter(
+            TextAnnotation.drawing_id == drawing_id,
+            TextAnnotation.is_deleted == False,  # noqa: E712
+        )
+        .all()
+    )
+
+    # Extract title block information
+    return _extract_title_block_from_texts(texts)
