@@ -22,7 +22,8 @@
       "Bash(export RAILWAY_TOKEN=a9e2219c-beab-4b85-8675-fe97a26061d6)",
       "Bash(railway whoami:*)",
       "Bash(powershell -Command \"$env:RAILWAY_TOKEN = ''a9e2219c-beab-4b85-8675-fe97a26061d6''; railway whoami\")",
-      "Bash(powershell -NoProfile -Command \"& { $env:RAILWAY_TOKEN = ''a9e2219c-beab-4b85-8675-fe97a26061d6''; railway whoami }\")"
+      "Bash(powershell -NoProfile -Command \"& { $env:RAILWAY_TOKEN = ''a9e2219c-beab-4b85-8675-fe97a26061d6''; railway whoami }\")",
+      "Bash(git push:*)"
     ]
   }
 }
