@@ -130,6 +130,13 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
     LOG_JSON_FORMAT: bool = False  # Use JSON format for logs (recommended for production)
 
+    # Rate Limiting Configuration
+    RATE_LIMIT_ENABLED: bool = True  # Enable/disable rate limiting globally
+    RATE_LIMIT_LOGIN: str = "10/minute"  # Login endpoint limit
+    RATE_LIMIT_CALLBACK: str = "20/minute"  # OAuth callback limit
+    RATE_LIMIT_REFRESH: str = "30/minute"  # Token refresh limit
+    RATE_LIMIT_DEFAULT: str = "100/minute"  # Default limit for other endpoints
+
     @property
     def is_supabase(self) -> bool:
         """Check if using Supabase as storage provider."""

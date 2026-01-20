@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.routes import auth, cloud, drawings, exports, projects
@@ -14,6 +15,7 @@ from app.core.logging import (
     set_request_id,
     setup_logging,
 )
+from app.core.rate_limiting import get_limiter
 
 # Configure logging before anything else
 setup_logging(
@@ -57,6 +59,33 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+# Configure rate limiting
+limiter = get_limiter()
+app.state.limiter = limiter
+
+
+async def rate_limit_exceeded_handler(request: Request, exc: Exception) -> Response:
+    """Handle rate limit exceeded errors with CORS headers."""
+    # Cast to RateLimitExceeded for type safety
+    rate_exc = exc if isinstance(exc, RateLimitExceeded) else None
+    detail = str(rate_exc.detail) if rate_exc else "Rate limit exceeded"
+
+    # Add CORS headers for rate limit responses
+    origin = request.headers.get("origin")
+    headers: dict[str, str] = {}
+    if origin and origin in settings.CORS_ORIGINS:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+
+    return JSONResponse(
+        status_code=429,
+        content={"error": "rate_limit_exceeded", "detail": detail},
+        headers=headers,
+    )
+
+
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 
 # Global exception handler to ensure CORS headers on errors

@@ -2,13 +2,20 @@ from typing import Annotated
 from urllib.parse import urlencode, urlparse
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import get_current_user, get_db
+from app.core.rate_limiting import (
+    callback_limit,
+    default_limit,
+    limiter,
+    login_limit,
+    refresh_limit,
+)
 from app.models import Organization, SSOProvider, User
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -355,7 +362,9 @@ async def _auth0_refresh(refresh_token: str) -> TokenResponse:
 
 
 @router.get("/login")
+@limiter.limit(login_limit)
 async def login(
+    request: Request,
     provider: str = Query(..., description="SSO provider: 'microsoft' or 'google'"),
     redirect_uri: str = Query(..., description="URI to redirect after login"),
 ) -> RedirectResponse:
@@ -380,7 +389,9 @@ async def login(
 
 
 @router.get("/callback")
+@limiter.limit(callback_limit)
 async def callback(
+    request: Request,
     code: str = Query(..., description="Authorization code from OAuth provider"),
     redirect_uri: str = Query(..., description="Original redirect URI"),
     db: Session = Depends(get_db),
@@ -400,16 +411,21 @@ async def callback(
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(request: RefreshTokenRequest) -> TokenResponse:
+@limiter.limit(refresh_limit)
+async def refresh_token(
+    request: Request,
+    body: RefreshTokenRequest,
+) -> TokenResponse:
     """Refresh access token using a refresh token."""
     if settings.AUTH_PROVIDER == "supabase":
-        return await _supabase_refresh(request.refresh_token)
+        return await _supabase_refresh(body.refresh_token)
     else:
-        return await _auth0_refresh(request.refresh_token)
+        return await _auth0_refresh(body.refresh_token)
 
 
 @router.post("/logout")
-async def logout() -> dict[str, str]:
+@limiter.limit(default_limit)
+async def logout(request: Request) -> dict[str, str]:
     """Logout the current user."""
     # For JWT-based auth, logout is handled client-side by deleting the token
     # Optionally, we could implement token blacklisting here
@@ -417,7 +433,9 @@ async def logout() -> dict[str, str]:
 
 
 @router.get("/me", response_model=UserResponse)
+@limiter.limit(default_limit)
 async def get_current_user_info(
+    request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> UserResponse:
     """Get the current authenticated user's information."""
