@@ -326,7 +326,7 @@ detail="Invalid or expired token"
 - [ ] Restrict CORS methods and headers
 - [ ] Update FastAPI to latest version
 - [ ] Set up pip-audit/npm audit in CI pipeline
-- [ ] Add rate limiting to authentication endpoints
+- [x] Add rate limiting to authentication endpoints - `a550134`
 
 ### Long-term
 

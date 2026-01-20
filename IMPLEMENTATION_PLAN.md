@@ -11,7 +11,8 @@
 **Phase 8: Testing & Polish** - Security hardening before production.
 - Staging URL: Railway (backend) + Vercel (frontend)
 - Security: Fixed open redirect vulnerability (ff0c836)
-- Next: Additional security fixes (path traversal, request timeouts)
+- Security: Added rate limiting to auth endpoints (a550134)
+- Next: Redis-based OAuth state storage, security headers middleware
 
 ---
 
@@ -364,6 +365,14 @@ _None_
   - Blocks userinfo attacks (localhost:5173@attacker.com)
   - Blocks non-http/https schemes (javascript:, data:)
   - Added 12 security tests validating against common attack vectors
+
+- [x] **Add rate limiting to authentication endpoints** - `a550134`
+  - Implemented slowapi-based rate limiting with Redis backend
+  - Applied rate limits: login (10/min), callback (20/min), refresh (30/min), default (100/min)
+  - Custom 429 handler with CORS headers for cross-origin requests
+  - Configurable limits via environment variables
+  - Falls back to in-memory storage if Redis unavailable
+  - Added 6 rate limiting tests
 
 ---
 
