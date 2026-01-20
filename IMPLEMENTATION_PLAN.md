@@ -455,6 +455,12 @@ _None_
   - Removed duplicate state handling from CloudStorageService and cloud routes
   - 17 comprehensive tests covering both storage backends
 
+- [x] **Fix mypy type errors in inference.py** - `7b47a96`
+  - Renamed httpx `client` variable to `supabase_client` to avoid shadowing
+  - Added explicit `bytes` type annotation for Supabase download response
+  - Resolved variable type confusion between httpx.Client and supabase.Client
+  - Mypy now passes with 0 errors (was 3 errors)
+
 ---
 
 ## Technical Decisions
