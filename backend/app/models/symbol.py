@@ -45,6 +45,7 @@ class Symbol(Base, UUIDMixin, TimestampMixin):
     # AI confidence and verification
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_verified: Mapped[bool] = mapped_column(default=False, nullable=False)
+    is_flagged: Mapped[bool] = mapped_column(default=False, nullable=False)
     is_deleted: Mapped[bool] = mapped_column(default=False, nullable=False)
 
     # Relationships

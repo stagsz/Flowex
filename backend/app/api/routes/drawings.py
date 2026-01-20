@@ -332,6 +332,7 @@ class SymbolResponse(BaseModel):
     bbox_height: float
     confidence: float | None
     is_verified: bool
+    is_flagged: bool
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -361,6 +362,7 @@ class SymbolUpdateRequest(BaseModel):
     tag_number: str | None = None
     symbol_class: str | None = None
     is_verified: bool | None = None
+    is_flagged: bool | None = None
 
 
 class TextUpdateRequest(BaseModel):
@@ -410,6 +412,7 @@ async def get_drawing_symbols(
             bbox_height=s.bbox_height,
             confidence=s.confidence,
             is_verified=s.is_verified,
+            is_flagged=s.is_flagged,
         )
         for s in symbols
     ]
@@ -432,6 +435,7 @@ async def get_drawing_symbols(
 
     # Summary stats
     verified_symbols = sum(1 for s in symbols if s.is_verified)
+    flagged_symbols = sum(1 for s in symbols if s.is_flagged)
     low_confidence_symbols = sum(1 for s in symbols if s.confidence and s.confidence < 0.85)
 
     return SymbolsAndTextsResponse(
@@ -440,6 +444,7 @@ async def get_drawing_symbols(
         summary={
             "total_symbols": len(symbols),
             "verified_symbols": verified_symbols,
+            "flagged_symbols": flagged_symbols,
             "low_confidence_symbols": low_confidence_symbols,
             "total_texts": len(texts),
             "verified_texts": sum(1 for t in texts if t.is_verified),
@@ -480,6 +485,8 @@ async def update_symbol(
         symbol.symbol_class = update.symbol_class
     if update.is_verified is not None:
         symbol.is_verified = update.is_verified
+    if update.is_flagged is not None:
+        symbol.is_flagged = update.is_flagged
 
     db.commit()
     db.refresh(symbol)
@@ -495,6 +502,7 @@ async def update_symbol(
         bbox_height=symbol.bbox_height,
         confidence=symbol.confidence,
         is_verified=symbol.is_verified,
+        is_flagged=symbol.is_flagged,
     )
 
 
@@ -620,6 +628,95 @@ async def verify_symbol(
         bbox_height=symbol.bbox_height,
         confidence=symbol.confidence,
         is_verified=symbol.is_verified,
+        is_flagged=symbol.is_flagged,
+    )
+
+
+@router.post("/{drawing_id}/symbols/{symbol_id}/flag", response_model=SymbolResponse)
+async def flag_symbol(
+    drawing_id: UUID,
+    symbol_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> SymbolResponse:
+    """Mark a symbol as flagged for review."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get symbol
+    symbol = db.query(Symbol).filter(
+        Symbol.id == symbol_id,
+        Symbol.drawing_id == drawing_id,
+    ).first()
+    if not symbol:
+        raise HTTPException(status_code=404, detail="Symbol not found")
+
+    symbol.is_flagged = True
+    db.commit()
+    db.refresh(symbol)
+
+    return SymbolResponse(
+        id=str(symbol.id),
+        symbol_class=symbol.symbol_class,
+        category=symbol.category.value,
+        tag_number=symbol.tag_number,
+        bbox_x=symbol.bbox_x,
+        bbox_y=symbol.bbox_y,
+        bbox_width=symbol.bbox_width,
+        bbox_height=symbol.bbox_height,
+        confidence=symbol.confidence,
+        is_verified=symbol.is_verified,
+        is_flagged=symbol.is_flagged,
+    )
+
+
+@router.post("/{drawing_id}/symbols/{symbol_id}/unflag", response_model=SymbolResponse)
+async def unflag_symbol(
+    drawing_id: UUID,
+    symbol_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> SymbolResponse:
+    """Remove flag from a symbol."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get symbol
+    symbol = db.query(Symbol).filter(
+        Symbol.id == symbol_id,
+        Symbol.drawing_id == drawing_id,
+    ).first()
+    if not symbol:
+        raise HTTPException(status_code=404, detail="Symbol not found")
+
+    symbol.is_flagged = False
+    db.commit()
+    db.refresh(symbol)
+
+    return SymbolResponse(
+        id=str(symbol.id),
+        symbol_class=symbol.symbol_class,
+        category=symbol.category.value,
+        tag_number=symbol.tag_number,
+        bbox_x=symbol.bbox_x,
+        bbox_y=symbol.bbox_y,
+        bbox_width=symbol.bbox_width,
+        bbox_height=symbol.bbox_height,
+        confidence=symbol.confidence,
+        is_verified=symbol.is_verified,
+        is_flagged=symbol.is_flagged,
     )
 
 
@@ -677,5 +774,111 @@ async def bulk_verify_symbols(
     return BulkVerifyResponse(
         verified_count=len(verified_ids),
         verified_ids=verified_ids,
+        failed_ids=failed_ids,
+    )
+
+
+class BulkFlagRequest(BaseModel):
+    symbol_ids: list[str]
+
+
+class BulkFlagResponse(BaseModel):
+    flagged_count: int
+    flagged_ids: list[str]
+    failed_ids: list[str]
+
+
+@router.post("/{drawing_id}/symbols/bulk-flag", response_model=BulkFlagResponse)
+async def bulk_flag_symbols(
+    drawing_id: UUID,
+    request: BulkFlagRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> BulkFlagResponse:
+    """Mark multiple symbols as flagged for review in a single operation."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    flagged_ids: list[str] = []
+    failed_ids: list[str] = []
+
+    for symbol_id_str in request.symbol_ids:
+        try:
+            symbol_id = UUID(symbol_id_str)
+            symbol = db.query(Symbol).filter(
+                Symbol.id == symbol_id,
+                Symbol.drawing_id == drawing_id,
+            ).first()
+            if symbol and not symbol.is_flagged:
+                symbol.is_flagged = True
+                flagged_ids.append(symbol_id_str)
+            elif symbol and symbol.is_flagged:
+                # Already flagged, still count as success
+                flagged_ids.append(symbol_id_str)
+            else:
+                failed_ids.append(symbol_id_str)
+        except (ValueError, TypeError):
+            # Invalid UUID format
+            failed_ids.append(symbol_id_str)
+
+    db.commit()
+
+    return BulkFlagResponse(
+        flagged_count=len(flagged_ids),
+        flagged_ids=flagged_ids,
+        failed_ids=failed_ids,
+    )
+
+
+@router.post("/{drawing_id}/symbols/bulk-unflag", response_model=BulkFlagResponse)
+async def bulk_unflag_symbols(
+    drawing_id: UUID,
+    request: BulkFlagRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> BulkFlagResponse:
+    """Remove flag from multiple symbols in a single operation."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    unflagged_ids: list[str] = []
+    failed_ids: list[str] = []
+
+    for symbol_id_str in request.symbol_ids:
+        try:
+            symbol_id = UUID(symbol_id_str)
+            symbol = db.query(Symbol).filter(
+                Symbol.id == symbol_id,
+                Symbol.drawing_id == drawing_id,
+            ).first()
+            if symbol and symbol.is_flagged:
+                symbol.is_flagged = False
+                unflagged_ids.append(symbol_id_str)
+            elif symbol and not symbol.is_flagged:
+                # Already unflagged, still count as success
+                unflagged_ids.append(symbol_id_str)
+            else:
+                failed_ids.append(symbol_id_str)
+        except (ValueError, TypeError):
+            # Invalid UUID format
+            failed_ids.append(symbol_id_str)
+
+    db.commit()
+
+    return BulkFlagResponse(
+        flagged_count=len(unflagged_ids),
+        flagged_ids=unflagged_ids,
         failed_ids=failed_ids,
     )

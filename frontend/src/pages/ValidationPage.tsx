@@ -27,6 +27,7 @@ import {
   Check,
   Square,
   CheckSquare,
+  Flag,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
@@ -36,7 +37,7 @@ type SaveStatus = "idle" | "saving" | "saved" | "error"
 
 // Undo/Redo action types
 interface EditAction {
-  type: "verify" | "delete" | "update_tag" | "bulk_verify"
+  type: "verify" | "delete" | "update_tag" | "bulk_verify" | "flag" | "bulk_flag"
   symbolId: string
   previousState: DetectedSymbol | null
   newState: DetectedSymbol | null
@@ -59,11 +60,13 @@ interface DetectedSymbol {
   width: number
   height: number
   validated: boolean
+  flagged: boolean
 }
 
 interface SymbolSummary {
   total_symbols: number
   verified_symbols: number
+  flagged_symbols: number
   low_confidence_symbols: number
   total_texts: number
   verified_texts: number
@@ -131,6 +134,7 @@ function SaveStatusIndicator({
 function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
   const shortcuts = [
     { key: "V", action: "Verify selected item(s)" },
+    { key: "F", action: "Flag selected item(s) for review" },
     { key: "Ctrl + A", action: "Select all items" },
     { key: "Delete / Backspace", action: "Delete selected item" },
     { key: "Ctrl + Z", action: "Undo last action" },
@@ -310,6 +314,7 @@ export function ValidationPage() {
             bbox_width: number
             bbox_height: number
             is_verified: boolean
+            is_flagged: boolean
           }) => ({
             id: s.id,
             type: s.category as "equipment" | "instrument" | "valve" | "other",
@@ -321,6 +326,7 @@ export function ValidationPage() {
             width: s.bbox_width,
             height: s.bbox_height,
             validated: s.is_verified,
+            flagged: s.is_flagged,
           }))
 
           setSymbols(transformedSymbols)
@@ -473,6 +479,142 @@ export function ValidationPage() {
       markSaved()
     } catch (err) {
       console.error("Failed to unverify symbols:", err)
+      markSaveError()
+    }
+  }, [drawingId, markSaving, markSaved, markSaveError])
+
+  // Flag a symbol for review
+  const flagSymbol = useCallback(async (symbolId: string, skipUndo = false) => {
+    const symbol = symbols.find(s => s.id === symbolId)
+    if (!symbol || symbol.flagged) return
+
+    markSaving()
+    try {
+      const response = await api.post(
+        `/api/v1/drawings/${drawingId}/symbols/${symbolId}/flag`
+      )
+      if (response.ok) {
+        const previousState = { ...symbol }
+        const newState = { ...symbol, flagged: true }
+
+        if (!skipUndo) {
+          pushToUndoStack({
+            type: "flag",
+            symbolId,
+            previousState,
+            newState,
+          })
+        }
+
+        setSymbols(prev =>
+          prev.map(s => s.id === symbolId ? { ...s, flagged: true } : s)
+        )
+        markSaved()
+        showToast(`Flagged: ${symbol.tag}`)
+      } else {
+        markSaveError()
+        showToast("Failed to flag symbol")
+      }
+    } catch (err) {
+      console.error("Failed to flag symbol:", err)
+      markSaveError()
+      showToast("Failed to flag symbol")
+    }
+  }, [drawingId, symbols, pushToUndoStack, showToast, markSaving, markSaved, markSaveError])
+
+  // Unflag a symbol (for undo)
+  const unflagSymbol = useCallback(async (symbolId: string) => {
+    markSaving()
+    try {
+      const response = await api.post(
+        `/api/v1/drawings/${drawingId}/symbols/${symbolId}/unflag`
+      )
+      if (response.ok) {
+        setSymbols(prev =>
+          prev.map(s => s.id === symbolId ? { ...s, flagged: false } : s)
+        )
+        markSaved()
+      } else {
+        markSaveError()
+      }
+    } catch (err) {
+      console.error("Failed to unflag symbol:", err)
+      markSaveError()
+    }
+  }, [drawingId, markSaving, markSaved, markSaveError])
+
+  // Bulk flag multiple symbols
+  const bulkFlagSymbols = useCallback(async (symbolIds: string[]) => {
+    // Filter to only unflagged symbols
+    const unflaggedIds = symbolIds.filter(id => {
+      const symbol = symbols.find(s => s.id === id)
+      return symbol && !symbol.flagged
+    })
+
+    if (unflaggedIds.length === 0) {
+      showToast("All selected items are already flagged")
+      return
+    }
+
+    markSaving()
+    try {
+      const response = await api.post(
+        `/api/v1/drawings/${drawingId}/symbols/bulk-flag`,
+        { symbol_ids: unflaggedIds }
+      )
+      if (response.ok) {
+        const data = await response.json()
+
+        // Store previous states for undo
+        const previousStates = unflaggedIds
+          .map(id => symbols.find(s => s.id === id))
+          .filter((s): s is DetectedSymbol => s !== undefined)
+
+        // Push bulk action to undo stack
+        pushToUndoStack({
+          type: "bulk_flag",
+          symbolId: "", // Not used for bulk
+          previousState: null,
+          newState: null,
+          symbolIds: data.flagged_ids,
+          previousStates,
+        })
+
+        // Update local state
+        setSymbols(prev =>
+          prev.map(s => data.flagged_ids.includes(s.id) ? { ...s, flagged: true } : s)
+        )
+
+        markSaved()
+        showToast(`Flagged ${data.flagged_count} item${data.flagged_count !== 1 ? 's' : ''} for review`)
+
+        // Clear selection after bulk flag
+        setSelectedSymbolIds(new Set())
+      } else {
+        markSaveError()
+        showToast("Failed to flag symbols")
+      }
+    } catch (err) {
+      console.error("Failed to bulk flag symbols:", err)
+      markSaveError()
+      showToast("Failed to flag symbols")
+    }
+  }, [drawingId, symbols, pushToUndoStack, showToast, markSaving, markSaved, markSaveError])
+
+  // Bulk unflag symbols (for undo)
+  const bulkUnflagSymbols = useCallback(async (symbolIds: string[]) => {
+    markSaving()
+    try {
+      await api.post(
+        `/api/v1/drawings/${drawingId}/symbols/bulk-unflag`,
+        { symbol_ids: symbolIds }
+      )
+      setSymbols(prev =>
+        prev.map(s => symbolIds.includes(s.id) ? { ...s, flagged: false } : s)
+      )
+      markSaved()
+    } catch (err) {
+      console.error("Failed to unflag symbols:", err)
       markSaveError()
     }
   }, [drawingId, markSaving, markSaved, markSaveError])
@@ -667,11 +809,23 @@ export function ValidationPage() {
           showToast("Undone: tag change")
         }
         break
+      case "flag":
+        if (action.previousState) {
+          await unflagSymbol(action.symbolId)
+          showToast("Undone: flag")
+        }
+        break
+      case "bulk_flag":
+        if (action.symbolIds && action.symbolIds.length > 0) {
+          await bulkUnflagSymbols(action.symbolIds)
+          showToast(`Undone: bulk flag (${action.symbolIds.length} items)`)
+        }
+        break
     }
 
     // Push to redo stack
     setRedoStack(prev => [...prev, action])
-  }, [undoStack, unverifySymbol, bulkUnverifySymbols, restoreSymbol, updateSymbolTag, showToast])
+  }, [undoStack, unverifySymbol, bulkUnverifySymbols, unflagSymbol, bulkUnflagSymbols, restoreSymbol, updateSymbolTag, showToast])
 
   // Redo last undone action
   const redo = useCallback(async () => {
@@ -711,11 +865,28 @@ export function ValidationPage() {
           showToast("Redone: tag change")
         }
         break
+      case "flag":
+        await flagSymbol(action.symbolId, true)
+        showToast("Redone: flag")
+        break
+      case "bulk_flag":
+        if (action.symbolIds && action.symbolIds.length > 0) {
+          // Re-flag all symbols in the bulk action
+          await api.post(
+            `/api/v1/drawings/${drawingId}/symbols/bulk-flag`,
+            { symbol_ids: action.symbolIds }
+          )
+          setSymbols(prev =>
+            prev.map(s => action.symbolIds?.includes(s.id) ? { ...s, flagged: true } : s)
+          )
+          showToast(`Redone: bulk flag (${action.symbolIds.length} items)`)
+        }
+        break
     }
 
     // Push back to undo stack
     setUndoStack(prev => [...prev, action])
-  }, [drawingId, redoStack, verifySymbol, deleteSymbol, updateSymbolTag, showToast])
+  }, [drawingId, redoStack, verifySymbol, flagSymbol, deleteSymbol, updateSymbolTag, showToast])
 
   const filteredSymbols = symbols.filter((symbol) => {
     const matchesSearch = symbol.tag.toLowerCase().includes(searchQuery.toLowerCase())
@@ -725,6 +896,7 @@ export function ValidationPage() {
   })
 
   const validatedCount = summary?.verified_symbols ?? symbols.filter((s) => s.validated).length
+  const flaggedCount = summary?.flagged_symbols ?? symbols.filter((s) => s.flagged).length
   const lowConfidenceCount = summary?.low_confidence_symbols ?? symbols.filter((s) => s.confidence < 0.85).length
   const totalSymbols = summary?.total_symbols ?? symbols.length
   const validationProgress = totalSymbols > 0 ? (validatedCount / totalSymbols) * 100 : 0
@@ -836,6 +1008,16 @@ export function ValidationPage() {
             verifySymbol(selectedSymbol)
           }
           break
+        case "f":
+          e.preventDefault()
+          // If multiple items are selected (checkbox selection), bulk flag
+          if (selectedSymbolIds.size > 0) {
+            bulkFlagSymbols(Array.from(selectedSymbolIds))
+          } else if (selectedSymbol) {
+            // Otherwise flag single selected item
+            flagSymbol(selectedSymbol)
+          }
+          break
         case " ":
           // Space toggles checkbox selection of focused item
           if (selectedSymbol) {
@@ -882,6 +1064,8 @@ export function ValidationPage() {
     redo,
     verifySymbol,
     bulkVerifySymbols,
+    flagSymbol,
+    bulkFlagSymbols,
     deleteSymbol,
     selectNextSymbol,
     selectPrevSymbol,
@@ -1096,12 +1280,20 @@ export function ValidationPage() {
               <span>{validatedCount}/{totalSymbols}</span>
             </div>
             <Progress value={validationProgress} className="h-2" />
-            {lowConfidenceCount > 0 && (
-              <p className="text-xs text-yellow-600 mt-1 flex items-center gap-1">
-                <AlertTriangle className="h-3 w-3" />
-                {lowConfidenceCount} items need review
-              </p>
-            )}
+            <div className="flex flex-col gap-1 mt-1">
+              {flaggedCount > 0 && (
+                <p className="text-xs text-orange-600 flex items-center gap-1">
+                  <Flag className="h-3 w-3" />
+                  {flaggedCount} flagged for review
+                </p>
+              )}
+              {lowConfidenceCount > 0 && (
+                <p className="text-xs text-yellow-600 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  {lowConfidenceCount} low confidence
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Search and filters */}
@@ -1170,6 +1362,21 @@ export function ValidationPage() {
                   Clear
                 </Button>
                 <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => bulkFlagSymbols(Array.from(selectedSymbolIds))}
+                  disabled={
+                    Array.from(selectedSymbolIds).every(id => {
+                      const s = symbols.find(sym => sym.id === id)
+                      return s?.flagged
+                    })
+                  }
+                >
+                  <Flag className="h-3 w-3 mr-1" />
+                  Flag ({selectedSymbolIds.size})
+                </Button>
+                <Button
                   size="sm"
                   className="h-7 text-xs"
                   onClick={() => bulkVerifySymbols(Array.from(selectedSymbolIds))}
@@ -1181,7 +1388,7 @@ export function ValidationPage() {
                   }
                 >
                   <CheckCircle2 className="h-3 w-3 mr-1" />
-                  Verify All ({selectedSymbolIds.size})
+                  Verify ({selectedSymbolIds.size})
                 </Button>
               </div>
             )}
@@ -1230,6 +1437,9 @@ export function ValidationPage() {
                     <span className="font-medium">{symbol.tag}</span>
                   </div>
                   <div className="flex items-center gap-2">
+                    {symbol.flagged && (
+                      <Flag className="h-4 w-4 text-orange-500" title="Flagged for review" />
+                    )}
                     {symbol.validated ? (
                       <CheckCircle className="h-4 w-4 text-green-500" />
                     ) : symbol.confidence < 0.85 ? (
@@ -1298,6 +1508,28 @@ export function ValidationPage() {
                     Delete
                   </Button>
                   <Button
+                    variant={symbols.find(s => s.id === selectedSymbol)?.flagged ? "secondary" : "outline"}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      const sym = symbols.find(s => s.id === selectedSymbol)
+                      if (sym?.flagged) {
+                        // Unflag via PATCH
+                        api.patch(`/api/v1/drawings/${drawingId}/symbols/${selectedSymbol}`, { is_flagged: false })
+                          .then(() => {
+                            setSymbols(prev => prev.map(s => s.id === selectedSymbol ? { ...s, flagged: false } : s))
+                            showToast(`Unflagged: ${sym.tag}`)
+                          })
+                      } else {
+                        flagSymbol(selectedSymbol)
+                      }
+                    }}
+                    title="Flag for review (F)"
+                  >
+                    <Flag className="h-4 w-4 mr-1" />
+                    {symbols.find(s => s.id === selectedSymbol)?.flagged ? "Unflag" : "Flag"}
+                  </Button>
+                  <Button
                     size="sm"
                     className="flex-1"
                     onClick={() => verifySymbol(selectedSymbol)}
@@ -1305,7 +1537,7 @@ export function ValidationPage() {
                     title="Verify (V)"
                   >
                     <CheckCircle className="h-4 w-4 mr-1" />
-                    {symbols.find(s => s.id === selectedSymbol)?.validated ? "Validated" : "Validate"}
+                    {symbols.find(s => s.id === selectedSymbol)?.validated ? "Verified" : "Verify"}
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground text-center mt-2">
