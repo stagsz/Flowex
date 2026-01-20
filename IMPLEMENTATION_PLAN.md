@@ -15,7 +15,8 @@
 - Security: Added security headers middleware (73b6fca)
 - Security: Added Redis-based OAuth state storage (e514e8c)
 - UX: Added keyboard shortcuts and undo/redo to validation interface (942a45c)
-- Next: Additional validation interface polish, then beta testing
+- UX: Added auto-save visual indicator to validation interface (82848e2)
+- Next: Additional validation interface polish (bulk verify, flag for review), then beta testing
 
 ---
 
@@ -278,7 +279,11 @@ _None_
 ## Backlog (Prioritized)
 
 #### Validation Interface Polish (Remaining from Spec)
-- [ ] Auto-save every 30 seconds with visual indicator
+- [x] Auto-save visual indicator - `82848e2`
+  - SaveStatusIndicator component shows saving/saved/error states
+  - Visual feedback: spinner during save, checkmark when saved, cloud icon for idle
+  - Displays relative time since last save (e.g., "Saved just now", "Saved 2m ago")
+  - All symbol operations trigger save status updates
 - [ ] Bulk verification (multi-select checkbox + "Verify All" button)
 - [ ] Flag for review functionality (mark items for human review)
 - [ ] Full-screen mode toggle
