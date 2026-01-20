@@ -12,9 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
-RUN pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r requirements.txt
+# Copy requirements and install Python dependencies (use prod file for smaller image)
+COPY requirements-prod.txt .
+RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements-prod.txt
 
 # Stage 2: Runtime
 FROM python:3.11-slim as runtime

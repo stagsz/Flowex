@@ -1,0 +1,59 @@
+# Web framework
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+python-multipart==0.0.9
+
+# Database
+sqlalchemy==2.0.25
+alembic==1.13.1
+psycopg2-binary==2.9.9
+asyncpg==0.29.0
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+httpx>=0.26.0,<0.29
+cryptography==42.0.2
+
+# Validation
+pydantic>=2.11.7,<3.0
+pydantic-settings>=2.3.0
+email-validator>=2.1.0
+
+# Background tasks
+celery==5.3.6
+redis==5.0.1
+
+# File processing
+python-magic==0.4.27
+boto3==1.34.34
+
+# Supabase
+supabase>=2.10.0
+
+# AI/ML - CPU only (much smaller image)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.2.0+cpu
+torchvision==0.17.0+cpu
+numpy==1.26.4
+Pillow==10.2.0
+pytesseract==0.3.10
+
+# PDF processing
+pdf2image==1.17.0
+PyMuPDF==1.23.22
+
+# CAD Export
+ezdxf==1.1.4
+
+# Excel/CSV Export
+openpyxl==3.1.2
+
+# PDF Export
+reportlab==4.1.0
+
+# Monitoring
+sentry-sdk[fastapi]==1.40.0
+
+# Utilities
+python-dotenv==1.0.1
