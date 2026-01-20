@@ -83,9 +83,9 @@ async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
 ) -> User:
     """Get the current authenticated user."""
-    # Dev auth bypass
+    # Dev auth bypass - accepts no token or "dev-token" from frontend
     if settings.DEBUG and settings.DEV_AUTH_BYPASS:
-        if credentials is None:
+        if credentials is None or credentials.credentials == "dev-token":
             logger.warning("DEV_AUTH_BYPASS active - using dev user")
             return _get_or_create_dev_user(db)
 
