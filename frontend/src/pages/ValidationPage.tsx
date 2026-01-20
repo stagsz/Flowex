@@ -30,6 +30,8 @@ import {
   Flag,
   Maximize2,
   Minimize2,
+  Plus,
+  MousePointer2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
@@ -43,6 +45,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   SYMBOL_CLASSES_BY_CATEGORY,
   CATEGORY_LABELS,
   getSymbolClassLabel,
@@ -54,7 +64,7 @@ type SaveStatus = "idle" | "saving" | "saved" | "error"
 
 // Undo/Redo action types
 interface EditAction {
-  type: "verify" | "delete" | "update_tag" | "update_class" | "bulk_verify" | "flag" | "bulk_flag"
+  type: "verify" | "delete" | "update_tag" | "update_class" | "bulk_verify" | "flag" | "bulk_flag" | "add"
   symbolId: string
   previousState: DetectedSymbol | null
   newState: DetectedSymbol | null
@@ -160,10 +170,11 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
     { key: "+ / =", action: "Zoom in" },
     { key: "- / _", action: "Zoom out" },
     { key: "G", action: "Toggle full-screen mode" },
+    { key: "A", action: "Toggle add symbol mode" },
     { key: "Tab", action: "Select next item" },
     { key: "Shift + Tab", action: "Select previous item" },
     { key: "Space", action: "Toggle checkbox selection" },
-    { key: "Escape", action: "Exit full-screen / Clear selection" },
+    { key: "Escape", action: "Exit full-screen / Clear / Exit add mode" },
     { key: "?", action: "Show this help" },
   ]
 
@@ -257,6 +268,14 @@ export function ValidationPage() {
 
   // Full-screen mode for PDF viewer
   const [isFullScreen, setIsFullScreen] = useState(false)
+
+  // Add symbol mode
+  const [isAddSymbolMode, setIsAddSymbolMode] = useState(false)
+  const [showAddSymbolDialog, setShowAddSymbolDialog] = useState(false)
+  const [pendingSymbolPosition, setPendingSymbolPosition] = useState<{ x: number; y: number } | null>(null)
+  const [newSymbolClass, setNewSymbolClass] = useState("")
+  const [newSymbolTag, setNewSymbolTag] = useState("")
+  const pdfContainerRef = useRef<HTMLDivElement>(null)
 
   // Auto-save status tracking
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle")
@@ -775,6 +794,82 @@ export function ValidationPage() {
     }
   }, [drawingId, symbols, pushToUndoStack, showToast, markSaving, markSaved, markSaveError])
 
+  // Create new symbol (add missing symbol)
+  const createSymbol = useCallback(async (
+    symbolClass: string,
+    tagNumber: string,
+    x: number,
+    y: number,
+    skipUndo = false
+  ) => {
+    // Find which category this class belongs to
+    let category: "equipment" | "instrument" | "valve" | "other" = "other"
+    for (const [cat, classes] of Object.entries(SYMBOL_CLASSES_BY_CATEGORY)) {
+      if (classes.some(c => c.value === symbolClass)) {
+        category = cat as "equipment" | "instrument" | "valve" | "other"
+        break
+      }
+    }
+
+    // Default symbol size (in pixels at 100% zoom)
+    const defaultSize = 30
+
+    markSaving()
+    try {
+      const response = await api.post(
+        `/api/v1/drawings/${drawingId}/symbols`,
+        {
+          symbol_class: symbolClass,
+          category: category,
+          tag_number: tagNumber || null,
+          bbox_x: x,
+          bbox_y: y,
+          bbox_width: defaultSize,
+          bbox_height: defaultSize,
+          confidence: null, // Manual addition has no AI confidence
+          is_verified: true, // Manual additions are considered verified
+        }
+      )
+      if (response.ok) {
+        const data = await response.json()
+        const newSymbol: DetectedSymbol = {
+          id: data.id,
+          type: category,
+          tag: tagNumber || "",
+          symbolClass: symbolClass,
+          confidence: 1.0,
+          x: x,
+          y: y,
+          width: defaultSize,
+          height: defaultSize,
+          validated: true,
+          flagged: false,
+        }
+
+        if (!skipUndo) {
+          pushToUndoStack({
+            type: "add",
+            symbolId: data.id,
+            previousState: null,
+            newState: newSymbol,
+          })
+        }
+
+        setSymbols(prev => [...prev, newSymbol])
+        setSelectedSymbol(data.id)
+        markSaved()
+        showToast(`Added: ${getSymbolClassLabel(symbolClass)}${tagNumber ? ` (${tagNumber})` : ""}`)
+      } else {
+        markSaveError()
+        showToast("Failed to add symbol")
+      }
+    } catch (err) {
+      console.error("Failed to add symbol:", err)
+      markSaveError()
+      showToast("Failed to add symbol")
+    }
+  }, [drawingId, pushToUndoStack, showToast, markSaving, markSaved, markSaveError])
+
   // Delete symbol (soft delete)
   const deleteSymbol = useCallback(async (symbolId: string, skipUndo = false) => {
     const symbol = symbols.find(s => s.id === symbolId)
@@ -901,11 +996,16 @@ export function ValidationPage() {
           showToast(`Undone: bulk flag (${action.symbolIds.length} items)`)
         }
         break
+      case "add":
+        // Undo add = delete the symbol
+        await deleteSymbol(action.symbolId, true)
+        showToast("Undone: add symbol")
+        break
     }
 
     // Push to redo stack
     setRedoStack(prev => [...prev, action])
-  }, [undoStack, unverifySymbol, bulkUnverifySymbols, unflagSymbol, bulkUnflagSymbols, restoreSymbol, updateSymbolTag, updateSymbolClass, showToast])
+  }, [undoStack, unverifySymbol, bulkUnverifySymbols, unflagSymbol, bulkUnflagSymbols, restoreSymbol, updateSymbolTag, updateSymbolClass, deleteSymbol, showToast])
 
   // Redo last undone action
   const redo = useCallback(async () => {
@@ -968,11 +1068,18 @@ export function ValidationPage() {
           showToast(`Redone: bulk flag (${action.symbolIds.length} items)`)
         }
         break
+      case "add":
+        // Redo add = restore the symbol
+        if (action.newState) {
+          await restoreSymbol(action.newState)
+          showToast("Redone: add symbol")
+        }
+        break
     }
 
     // Push back to undo stack
     setUndoStack(prev => [...prev, action])
-  }, [drawingId, redoStack, verifySymbol, flagSymbol, deleteSymbol, updateSymbolTag, updateSymbolClass, showToast])
+  }, [drawingId, redoStack, verifySymbol, flagSymbol, deleteSymbol, restoreSymbol, updateSymbolTag, updateSymbolClass, showToast])
 
   const filteredSymbols = symbols.filter((symbol) => {
     const matchesSearch = symbol.tag.toLowerCase().includes(searchQuery.toLowerCase())
@@ -1041,11 +1148,16 @@ export function ValidationPage() {
         return
       }
 
-      // Close help, exit full-screen, or clear selection
+      // Close help, exit full-screen, exit add mode, or clear selection
       if (e.key === "Escape") {
         e.preventDefault()
         if (showHelp) {
           setShowHelp(false)
+        } else if (showAddSymbolDialog) {
+          setShowAddSymbolDialog(false)
+          setPendingSymbolPosition(null)
+        } else if (isAddSymbolMode) {
+          setIsAddSymbolMode(false)
         } else if (isFullScreen) {
           setIsFullScreen(false)
         } else if (selectedSymbolIds.size > 0) {
@@ -1133,6 +1245,10 @@ export function ValidationPage() {
         case "g":
           e.preventDefault()
           setIsFullScreen(prev => !prev)
+          break
+        case "a":
+          e.preventDefault()
+          setIsAddSymbolMode(prev => !prev)
           break
         case "tab":
           e.preventDefault()
@@ -1310,11 +1426,43 @@ export function ValidationPage() {
               >
                 {isFullScreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
+              <div className="w-px h-4 bg-border mx-1" />
+              <Button
+                variant={isAddSymbolMode ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setIsAddSymbolMode(!isAddSymbolMode)}
+                title="Add missing symbol (A)"
+                className={cn(
+                  "gap-1",
+                  isAddSymbolMode && "bg-primary text-primary-foreground"
+                )}
+              >
+                {isAddSymbolMode ? <MousePointer2 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                <span className="text-xs">{isAddSymbolMode ? "Click PDF" : "Add"}</span>
+              </Button>
             </div>
           </div>
-          <div className="flex-1 overflow-auto bg-muted/20 p-4 flex items-center justify-center">
+          <div className={cn(
+            "flex-1 overflow-auto bg-muted/20 p-4 flex items-center justify-center",
+            isAddSymbolMode && "cursor-crosshair"
+          )}>
             <div
+              ref={pdfContainerRef}
               className="bg-white shadow-lg relative transition-transform duration-300"
+              onClick={(e) => {
+                if (!isAddSymbolMode || !pdfContainerRef.current) return
+
+                // Calculate click position relative to the PDF container
+                const rect = pdfContainerRef.current.getBoundingClientRect()
+                const x = (e.clientX - rect.left) / (zoom / 100)
+                const y = (e.clientY - rect.top) / (zoom / 100)
+
+                // Store position and open dialog
+                setPendingSymbolPosition({ x, y })
+                setNewSymbolClass("")
+                setNewSymbolTag("")
+                setShowAddSymbolDialog(true)
+              }}
               style={{
                 transform: `rotate(${rotation}deg)`,
                 transformOrigin: 'center center',
@@ -1686,6 +1834,81 @@ export function ValidationPage() {
           )}
         </div>
       </div>
+
+      {/* Add Symbol Dialog */}
+      <Dialog open={showAddSymbolDialog} onOpenChange={setShowAddSymbolDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add Missing Symbol</DialogTitle>
+            <DialogDescription>
+              Select the symbol type and optionally add a tag number.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Symbol Class *</label>
+              <Select value={newSymbolClass} onValueChange={setNewSymbolClass}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select symbol class...">
+                    {newSymbolClass ? getSymbolClassLabel(newSymbolClass) : "Select symbol class..."}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="max-h-80">
+                  {(Object.entries(SYMBOL_CLASSES_BY_CATEGORY) as [SymbolCategory, typeof SYMBOL_CLASSES_BY_CATEGORY[SymbolCategory]][]).map(([category, classes]) => (
+                    <SelectGroup key={category}>
+                      <SelectLabel className="text-xs font-semibold text-muted-foreground">
+                        {CATEGORY_LABELS[category]}
+                      </SelectLabel>
+                      {classes.map((symbolClass) => (
+                        <SelectItem key={symbolClass.value} value={symbolClass.value}>
+                          {symbolClass.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Tag Number (optional)</label>
+              <Input
+                placeholder="e.g., P-101, V-205"
+                value={newSymbolTag}
+                onChange={(e) => setNewSymbolTag(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAddSymbolDialog(false)
+                setPendingSymbolPosition(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!newSymbolClass}
+              onClick={() => {
+                if (pendingSymbolPosition && newSymbolClass) {
+                  createSymbol(
+                    newSymbolClass,
+                    newSymbolTag,
+                    pendingSymbolPosition.x,
+                    pendingSymbolPosition.y
+                  )
+                  setShowAddSymbolDialog(false)
+                  setPendingSymbolPosition(null)
+                  setIsAddSymbolMode(false)
+                }
+              }}
+            >
+              Add Symbol
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Toast notification */}
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}

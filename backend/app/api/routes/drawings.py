@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import StorageProvider, settings
 from app.core.deps import get_current_user, get_db
 from app.models import DrawingStatus, Project, Symbol, TextAnnotation, User
+from app.models.symbol import SymbolCategory
 from app.services import drawings as drawing_service
 from app.services.drawings import FileValidationError
 from app.services.storage import get_storage_service
@@ -358,6 +359,18 @@ class SymbolsAndTextsResponse(BaseModel):
     summary: dict[str, int]
 
 
+class SymbolCreateRequest(BaseModel):
+    symbol_class: str
+    category: str
+    tag_number: str | None = None
+    bbox_x: float
+    bbox_y: float
+    bbox_width: float
+    bbox_height: float
+    confidence: float | None = None
+    is_verified: bool = False
+
+
 class SymbolUpdateRequest(BaseModel):
     tag_number: str | None = None
     symbol_class: str | None = None
@@ -449,6 +462,62 @@ async def get_drawing_symbols(
             "total_texts": len(texts),
             "verified_texts": sum(1 for t in texts if t.is_verified),
         },
+    )
+
+
+@router.post("/{drawing_id}/symbols", response_model=SymbolResponse, status_code=201)
+async def create_symbol(
+    drawing_id: UUID,
+    symbol_data: SymbolCreateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> SymbolResponse:
+    """Create a new symbol (manually add a missing symbol)."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Map category string to enum
+    try:
+        category = SymbolCategory(symbol_data.category.lower())
+    except ValueError:
+        category = SymbolCategory.OTHER
+
+    # Create new symbol
+    symbol = Symbol(
+        drawing_id=drawing_id,
+        symbol_class=symbol_data.symbol_class,
+        category=category,
+        tag_number=symbol_data.tag_number,
+        bbox_x=symbol_data.bbox_x,
+        bbox_y=symbol_data.bbox_y,
+        bbox_width=symbol_data.bbox_width,
+        bbox_height=symbol_data.bbox_height,
+        confidence=symbol_data.confidence,
+        is_verified=symbol_data.is_verified,
+    )
+
+    db.add(symbol)
+    db.commit()
+    db.refresh(symbol)
+
+    return SymbolResponse(
+        id=str(symbol.id),
+        symbol_class=symbol.symbol_class,
+        category=symbol.category.value,
+        tag_number=symbol.tag_number,
+        bbox_x=symbol.bbox_x,
+        bbox_y=symbol.bbox_y,
+        bbox_width=symbol.bbox_width,
+        bbox_height=symbol.bbox_height,
+        confidence=symbol.confidence,
+        is_verified=symbol.is_verified,
+        is_flagged=symbol.is_flagged,
     )
 
 
