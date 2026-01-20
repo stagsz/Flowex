@@ -1,5 +1,14 @@
+import os
+import sys
 import traceback
 from collections.abc import Awaitable, Callable
+
+# Debug: Print environment info at startup (before any imports that might fail)
+print(f"[STARTUP] Python: {sys.version}", flush=True)
+print(f"[STARTUP] PORT: {os.environ.get('PORT', 'not set')}", flush=True)
+print(f"[STARTUP] DEBUG: {os.environ.get('DEBUG', 'not set')}", flush=True)
+print(f"[STARTUP] DATABASE_URL set: {bool(os.environ.get('DATABASE_URL'))}", flush=True)
+print(f"[STARTUP] Loading config...", flush=True)
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +17,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.routes import auth, cloud, drawings, exports, projects
 from app.core.config import settings
+
+print(f"[STARTUP] Config loaded successfully. DEBUG={settings.DEBUG}", flush=True)
 from app.core.logging import (
     generate_request_id,
     get_logger,
