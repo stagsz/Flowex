@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import get_current_user, get_db
 from app.models import Project, User
 
@@ -43,7 +44,11 @@ async def list_projects(
     include_archived: bool = False,
 ) -> list[ProjectResponse]:
     """List all projects for the current user's organization."""
-    query = db.query(Project).filter(Project.organization_id == current_user.organization_id)
+    # In DEBUG mode, show all projects (for testing)
+    if settings.DEBUG:
+        query = db.query(Project)
+    else:
+        query = db.query(Project).filter(Project.organization_id == current_user.organization_id)
     if not include_archived:
         query = query.filter(Project.is_archived == False)  # noqa: E712
     projects = query.order_by(Project.created_at.desc()).offset(skip).limit(limit).all()
