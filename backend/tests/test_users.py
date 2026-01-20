@@ -2,11 +2,12 @@
 
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.deps import get_current_user
 from app.main import app
 from app.models import (
     CloudConnection,
@@ -87,7 +88,7 @@ class TestGDPRDataExportSuccess:
         org.updated_at = datetime(2024, 1, 1, tzinfo=UTC)
         return org
 
-    def _create_mock_project(self, org_id: uuid4) -> Project:
+    def _create_mock_project(self, org_id: UUID) -> Project:
         """Create a mock project for testing."""
         project = MagicMock(spec=Project)
         project.id = uuid4()
@@ -99,7 +100,7 @@ class TestGDPRDataExportSuccess:
         project.updated_at = datetime(2024, 1, 10, tzinfo=UTC)
         return project
 
-    def _create_mock_drawing(self, project_id: uuid4) -> Drawing:
+    def _create_mock_drawing(self, project_id: UUID) -> Drawing:
         """Create a mock drawing for testing."""
         drawing = MagicMock(spec=Drawing)
         drawing.id = uuid4()
@@ -118,7 +119,7 @@ class TestGDPRDataExportSuccess:
         drawing.updated_at = datetime(2024, 1, 5, tzinfo=UTC)
         return drawing
 
-    def _create_mock_symbol(self, drawing_id: uuid4) -> Symbol:
+    def _create_mock_symbol(self, drawing_id: UUID) -> Symbol:
         """Create a mock symbol for testing."""
         symbol = MagicMock(spec=Symbol)
         symbol.id = uuid4()
@@ -138,7 +139,7 @@ class TestGDPRDataExportSuccess:
         symbol.created_at = datetime(2024, 1, 5, tzinfo=UTC)
         return symbol
 
-    def _create_mock_line(self, drawing_id: uuid4) -> Line:
+    def _create_mock_line(self, drawing_id: UUID) -> Line:
         """Create a mock line for testing."""
         line = MagicMock(spec=Line)
         line.id = uuid4()
@@ -157,7 +158,7 @@ class TestGDPRDataExportSuccess:
         line.created_at = datetime(2024, 1, 5, tzinfo=UTC)
         return line
 
-    def _create_mock_text(self, drawing_id: uuid4, symbol_id: uuid4 | None = None) -> TextAnnotation:
+    def _create_mock_text(self, drawing_id: UUID, symbol_id: UUID | None = None) -> TextAnnotation:
         """Create a mock text annotation for testing."""
         text = MagicMock(spec=TextAnnotation)
         text.id = uuid4()
@@ -175,7 +176,7 @@ class TestGDPRDataExportSuccess:
         text.created_at = datetime(2024, 1, 5, tzinfo=UTC)
         return text
 
-    def _create_mock_cloud_connection(self, user_id: uuid4, org_id: uuid4) -> CloudConnection:
+    def _create_mock_cloud_connection(self, user_id: UUID, org_id: UUID) -> CloudConnection:
         """Create a mock cloud connection for testing."""
         conn = MagicMock(spec=CloudConnection)
         conn.id = uuid4()
@@ -190,75 +191,28 @@ class TestGDPRDataExportSuccess:
         conn.created_at = datetime(2024, 1, 5, tzinfo=UTC)
         return conn
 
-    def test_data_export_success_full_data(self):
-        """Test data export returns complete user data structure."""
-        # Create mock data hierarchy
+    def test_data_export_auth_bypass_returns_response(self):
+        """Test data export with auth bypass triggers the endpoint logic.
+
+        Note: Full integration test would require database setup.
+        This test verifies that the endpoint is accessible and returns
+        some response when auth is overridden.
+        """
         org = self._create_mock_org()
         user = self._create_mock_user(org)
-        project = self._create_mock_project(org.id)
-        drawing = self._create_mock_drawing(project.id)
-        symbol = self._create_mock_symbol(drawing.id)
-        line = self._create_mock_line(drawing.id)
-        text = self._create_mock_text(drawing.id, symbol.id)
-        cloud_conn = self._create_mock_cloud_connection(user.id, org.id)
 
-        with patch("app.api.routes.users.get_current_user") as mock_auth:
-            mock_auth.return_value = user
+        # Override auth dependency
+        app.dependency_overrides[get_current_user] = lambda: user
 
-            with patch("app.api.routes.users.get_db") as mock_db:
-                mock_session = MagicMock()
-
-                # Setup query returns
-                mock_session.query.return_value.filter.return_value.first.return_value = org
-                mock_session.query.return_value.filter.return_value.all.side_effect = [
-                    [project],  # Projects
-                    [cloud_conn],  # Cloud connections
-                ]
-                mock_session.query.return_value.filter.return_value.count.side_effect = [
-                    1,  # Drawings count
-                    1,  # Symbols count
-                    1,  # Lines count
-                    1,  # Text annotations count
-                ]
-
-                # For drawing serialization
-                def query_side_effect(model):
-                    mock_query = MagicMock()
-                    if model == Drawing:
-                        mock_query.filter.return_value.all.return_value = [drawing]
-                        mock_query.filter.return_value.count.return_value = 1
-                    elif model == Symbol:
-                        mock_query.filter.return_value.all.return_value = [symbol]
-                        mock_query.join.return_value.join.return_value.filter.return_value.count.return_value = 1
-                    elif model == Line:
-                        mock_query.filter.return_value.all.return_value = [line]
-                        mock_query.join.return_value.join.return_value.filter.return_value.count.return_value = 1
-                    elif model == TextAnnotation:
-                        mock_query.filter.return_value.all.return_value = [text]
-                        mock_query.join.return_value.join.return_value.filter.return_value.count.return_value = 1
-                    elif model == Organization:
-                        mock_query.filter.return_value.first.return_value = org
-                    elif model == Project:
-                        mock_query.filter.return_value.all.return_value = [project]
-                    elif model == CloudConnection:
-                        mock_query.filter.return_value.all.return_value = [cloud_conn]
-                    return mock_query
-
-                mock_session.query.side_effect = query_side_effect
-                mock_db.return_value.__enter__.return_value = mock_session
-                mock_db.return_value.__exit__ = MagicMock()
-
-                # Override dependency
-                app.dependency_overrides[get_current_user] = lambda: user
-
-                try:
-                    response = client.get("/api/v1/users/me/data-export")
-
-                    # For now, just verify auth is required
-                    # Full integration test would require database setup
-                    assert response.status_code in [200, 403, 500]
-                finally:
-                    app.dependency_overrides.clear()
+        try:
+            response = client.get("/api/v1/users/me/data-export")
+            # With auth bypassed but no real DB, we expect either:
+            # - 500 (DB lookup fails)
+            # - 200 (if somehow succeeds with mock)
+            # The important thing is we got past auth (not 403)
+            assert response.status_code != 403
+        finally:
+            app.dependency_overrides.clear()
 
 
 class TestGDPRDataExportResponseStructure:
@@ -530,8 +484,7 @@ class TestGDPREndpointMetadata:
         response = client.get("/openapi.json")
         assert response.status_code == 200
         schema = response.json()
-        tags = [tag["name"] for tag in schema.get("tags", [])]
-        # Tag may be auto-generated, check paths instead
+        # Check paths for users tag instead of checking tags list
         data_export_path = schema["paths"].get("/api/v1/users/me/data-export", {})
         get_op = data_export_path.get("get", {})
         assert "users" in get_op.get("tags", [])

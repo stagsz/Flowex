@@ -169,7 +169,7 @@ export function ProjectsPage() {
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="name">Project Name</Label>
+                <Label htmlFor="project-name">Project Name</Label>
                 <Input
                   id="project-name"
                   name="project-name"
@@ -181,9 +181,11 @@ export function ProjectsPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="description">Description (optional)</Label>
+                <Label htmlFor="project-description">Description (optional)</Label>
                 <Textarea
-                  id="description"
+                  id="project-description"
+                  name="project-description"
+                  autoComplete="off"
                   placeholder="Brief description of the project..."
                   value={newProjectDescription}
                   onChange={(e) => setNewProjectDescription(e.target.value)}
