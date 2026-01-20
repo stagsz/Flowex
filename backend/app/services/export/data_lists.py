@@ -923,7 +923,7 @@ class DataListExportService:
         elements.append(Spacer(1, 6 * mm))
 
         # Group symbols by category
-        categories = {
+        categories: dict[str, list["Symbol"]] = {
             "Equipment": [],
             "Instruments": [],
             "Valves": [],
