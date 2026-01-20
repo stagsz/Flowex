@@ -1,3 +1,5 @@
+import { useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import { useAuthStore } from "@/stores/authStore"
 import { Button } from "@/components/ui/button"
 import {
@@ -9,7 +11,26 @@ import {
 } from "@/components/ui/card"
 
 export function LoginPage() {
-  const { login, isLoading, error } = useAuthStore()
+  const navigate = useNavigate()
+  const { login, isLoading, error, handleAuthCallback, user } = useAuthStore()
+
+  // Handle OAuth callback tokens in URL hash (Supabase redirects here)
+  useEffect(() => {
+    const hash = window.location.hash
+    if (hash && hash.includes("access_token")) {
+      // Process the OAuth callback
+      handleAuthCallback().then(() => {
+        navigate("/dashboard", { replace: true })
+      })
+    }
+  }, [handleAuthCallback, navigate])
+
+  // If already logged in, redirect to dashboard
+  useEffect(() => {
+    if (user) {
+      navigate("/dashboard", { replace: true })
+    }
+  }, [user, navigate])
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/40">
