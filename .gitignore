@@ -82,3 +82,5 @@ frontend/npm-output.txt
 /*.png
 /*.jpg
 /*.jpeg
+
+/settings.local.json
