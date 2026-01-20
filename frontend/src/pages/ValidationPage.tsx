@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useParams, Link } from "react-router-dom"
 import { Document, Page, pdfjs } from "react-pdf"
 import "react-pdf/dist/Page/AnnotationLayer.css"
@@ -20,9 +20,18 @@ import {
   AlertTriangle,
   Filter,
   Loader2,
+  Keyboard,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
+
+// Undo/Redo action types
+interface EditAction {
+  type: "verify" | "delete" | "update_tag"
+  symbolId: string
+  previousState: DetectedSymbol | null
+  newState: DetectedSymbol | null
+}
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
@@ -48,6 +57,59 @@ interface SymbolSummary {
   verified_texts: number
 }
 
+// Toast notification component
+function Toast({ message, onClose }: { message: string; onClose: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 2000)
+    return () => clearTimeout(timer)
+  }, [onClose])
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50 bg-foreground text-background px-4 py-2 rounded-md shadow-lg animate-in slide-in-from-bottom-2 fade-in duration-200">
+      {message}
+    </div>
+  )
+}
+
+// Keyboard shortcuts help dialog
+function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
+  const shortcuts = [
+    { key: "V", action: "Verify selected item" },
+    { key: "Delete / Backspace", action: "Delete selected item" },
+    { key: "Ctrl + Z", action: "Undo last action" },
+    { key: "Ctrl + Y", action: "Redo last action" },
+    { key: "Ctrl + S", action: "Save (show saved status)" },
+    { key: "+ / =", action: "Zoom in" },
+    { key: "- / _", action: "Zoom out" },
+    { key: "Tab", action: "Select next item" },
+    { key: "Shift + Tab", action: "Select previous item" },
+    { key: "Escape", action: "Deselect / Close help" },
+    { key: "?", action: "Show this help" },
+  ]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="bg-background rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Keyboard className="h-5 w-5" />
+            Keyboard Shortcuts
+          </h3>
+          <Button variant="ghost" size="sm" onClick={onClose}>×</Button>
+        </div>
+        <div className="space-y-2">
+          {shortcuts.map(({ key, action }) => (
+            <div key={key} className="flex items-center justify-between py-1 border-b border-border/50 last:border-0">
+              <kbd className="px-2 py-1 bg-muted rounded text-sm font-mono">{key}</kbd>
+              <span className="text-sm text-muted-foreground">{action}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ValidationPage() {
   const { drawingId } = useParams()
   const [zoom, setZoom] = useState(50) // Start smaller for large P&ID drawings
@@ -65,6 +127,21 @@ export function ValidationPage() {
   const [symbolsLoading, setSymbolsLoading] = useState(true)
   const [summary, setSummary] = useState<SymbolSummary | null>(null)
   const [editingTag, setEditingTag] = useState<string>("")
+
+  // Undo/Redo state
+  const [undoStack, setUndoStack] = useState<EditAction[]>([])
+  const [redoStack, setRedoStack] = useState<EditAction[]>([])
+  const maxUndoLevels = 20
+
+  // Toast notification state
+  const [toast, setToast] = useState<string | null>(null)
+  const showToast = useCallback((message: string) => setToast(message), [])
+
+  // Keyboard shortcuts help
+  const [showHelp, setShowHelp] = useState(false)
+
+  // Ref for focus management
+  const containerRef = useRef<HTMLDivElement>(null)
 
   // Drawing info from API
   const [drawing, setDrawing] = useState({
@@ -172,53 +249,223 @@ export function ValidationPage() {
     setPdfLoading(false)
   }
 
+  // Push action to undo stack
+  const pushToUndoStack = useCallback((action: EditAction) => {
+    setUndoStack(prev => {
+      const newStack = [...prev, action]
+      // Keep only last N actions
+      return newStack.slice(-maxUndoLevels)
+    })
+    // Clear redo stack on new action
+    setRedoStack([])
+  }, [maxUndoLevels])
+
   // Verify a symbol
-  const verifySymbol = useCallback(async (symbolId: string) => {
+  const verifySymbol = useCallback(async (symbolId: string, skipUndo = false) => {
+    const symbol = symbols.find(s => s.id === symbolId)
+    if (!symbol || symbol.validated) return
+
     try {
       const response = await api.post(
         `/api/v1/drawings/${drawingId}/symbols/${symbolId}/verify`
       )
       if (response.ok) {
+        const previousState = { ...symbol }
+        const newState = { ...symbol, validated: true }
+
+        if (!skipUndo) {
+          pushToUndoStack({
+            type: "verify",
+            symbolId,
+            previousState,
+            newState,
+          })
+        }
+
         setSymbols(prev =>
           prev.map(s => s.id === symbolId ? { ...s, validated: true } : s)
         )
+        showToast(`Verified: ${symbol.tag}`)
       }
     } catch (err) {
       console.error("Failed to verify symbol:", err)
+      showToast("Failed to verify symbol")
+    }
+  }, [drawingId, symbols, pushToUndoStack, showToast])
+
+  // Unverify a symbol (for undo)
+  const unverifySymbol = useCallback(async (symbolId: string) => {
+    try {
+      const response = await api.patch(
+        `/api/v1/drawings/${drawingId}/symbols/${symbolId}`,
+        { is_verified: false }
+      )
+      if (response.ok) {
+        setSymbols(prev =>
+          prev.map(s => s.id === symbolId ? { ...s, validated: false } : s)
+        )
+      }
+    } catch (err) {
+      console.error("Failed to unverify symbol:", err)
     }
   }, [drawingId])
 
   // Update symbol tag
-  const updateSymbolTag = useCallback(async (symbolId: string, newTag: string) => {
+  const updateSymbolTag = useCallback(async (symbolId: string, newTag: string, skipUndo = false) => {
+    const symbol = symbols.find(s => s.id === symbolId)
+    if (!symbol || symbol.tag === newTag) return
+
     try {
       const response = await api.patch(
         `/api/v1/drawings/${drawingId}/symbols/${symbolId}`,
         { tag_number: newTag }
       )
       if (response.ok) {
+        if (!skipUndo) {
+          pushToUndoStack({
+            type: "update_tag",
+            symbolId,
+            previousState: { ...symbol },
+            newState: { ...symbol, tag: newTag },
+          })
+        }
+
         setSymbols(prev =>
           prev.map(s => s.id === symbolId ? { ...s, tag: newTag } : s)
         )
       }
     } catch (err) {
       console.error("Failed to update symbol:", err)
+      showToast("Failed to update tag")
     }
-  }, [drawingId])
+  }, [drawingId, symbols, pushToUndoStack, showToast])
 
   // Delete symbol (soft delete)
-  const deleteSymbol = useCallback(async (symbolId: string) => {
+  const deleteSymbol = useCallback(async (symbolId: string, skipUndo = false) => {
+    const symbol = symbols.find(s => s.id === symbolId)
+    if (!symbol) return
+
     try {
       const response = await api.delete(
         `/api/v1/drawings/${drawingId}/symbols/${symbolId}`
       )
       if (response.ok) {
+        if (!skipUndo) {
+          pushToUndoStack({
+            type: "delete",
+            symbolId,
+            previousState: { ...symbol },
+            newState: null,
+          })
+        }
+
         setSymbols(prev => prev.filter(s => s.id !== symbolId))
         setSelectedSymbol(null)
+        showToast(`Deleted: ${symbol.tag}`)
       }
     } catch (err) {
       console.error("Failed to delete symbol:", err)
+      showToast("Failed to delete symbol")
     }
-  }, [drawingId])
+  }, [drawingId, symbols, pushToUndoStack, showToast])
+
+  // Restore a deleted symbol (for undo)
+  const restoreSymbol = useCallback(async (symbol: DetectedSymbol) => {
+    try {
+      // Re-create the symbol via API
+      const response = await api.post(
+        `/api/v1/drawings/${drawingId}/symbols`,
+        {
+          symbol_class: symbol.symbolClass,
+          category: symbol.type,
+          tag_number: symbol.tag,
+          bbox_x: symbol.x,
+          bbox_y: symbol.y,
+          bbox_width: symbol.width,
+          bbox_height: symbol.height,
+          confidence: symbol.confidence,
+          is_verified: symbol.validated,
+        }
+      )
+      if (response.ok) {
+        const data = await response.json()
+        // Add symbol back with new ID from API
+        setSymbols(prev => [...prev, {
+          ...symbol,
+          id: data.id || symbol.id,
+        }])
+      }
+    } catch (err) {
+      console.error("Failed to restore symbol:", err)
+      showToast("Failed to restore symbol")
+    }
+  }, [drawingId, showToast])
+
+  // Undo last action
+  const undo = useCallback(async () => {
+    if (undoStack.length === 0) {
+      showToast("Nothing to undo")
+      return
+    }
+
+    const action = undoStack[undoStack.length - 1]
+    setUndoStack(prev => prev.slice(0, -1))
+
+    switch (action.type) {
+      case "verify":
+        if (action.previousState) {
+          await unverifySymbol(action.symbolId)
+          showToast("Undone: verification")
+        }
+        break
+      case "delete":
+        if (action.previousState) {
+          await restoreSymbol(action.previousState)
+          showToast("Undone: delete")
+        }
+        break
+      case "update_tag":
+        if (action.previousState) {
+          await updateSymbolTag(action.symbolId, action.previousState.tag, true)
+          showToast("Undone: tag change")
+        }
+        break
+    }
+
+    // Push to redo stack
+    setRedoStack(prev => [...prev, action])
+  }, [undoStack, unverifySymbol, restoreSymbol, updateSymbolTag, showToast])
+
+  // Redo last undone action
+  const redo = useCallback(async () => {
+    if (redoStack.length === 0) {
+      showToast("Nothing to redo")
+      return
+    }
+
+    const action = redoStack[redoStack.length - 1]
+    setRedoStack(prev => prev.slice(0, -1))
+
+    switch (action.type) {
+      case "verify":
+        await verifySymbol(action.symbolId, true)
+        showToast("Redone: verification")
+        break
+      case "delete":
+        await deleteSymbol(action.symbolId, true)
+        showToast("Redone: delete")
+        break
+      case "update_tag":
+        if (action.newState) {
+          await updateSymbolTag(action.symbolId, action.newState.tag, true)
+          showToast("Redone: tag change")
+        }
+        break
+    }
+
+    // Push back to undo stack
+    setUndoStack(prev => [...prev, action])
+  }, [redoStack, verifySymbol, deleteSymbol, updateSymbolTag, showToast])
 
   const filteredSymbols = symbols.filter((symbol) => {
     const matchesSearch = symbol.tag.toLowerCase().includes(searchQuery.toLowerCase())
@@ -247,8 +494,135 @@ export function ValidationPage() {
     }
   }, [selectedSymbol, symbols])
 
+  // Navigate to next/previous symbol in filtered list
+  const selectNextSymbol = useCallback(() => {
+    if (filteredSymbols.length === 0) return
+    const currentIndex = selectedSymbol
+      ? filteredSymbols.findIndex(s => s.id === selectedSymbol)
+      : -1
+    const nextIndex = (currentIndex + 1) % filteredSymbols.length
+    setSelectedSymbol(filteredSymbols[nextIndex].id)
+  }, [filteredSymbols, selectedSymbol])
+
+  const selectPrevSymbol = useCallback(() => {
+    if (filteredSymbols.length === 0) return
+    const currentIndex = selectedSymbol
+      ? filteredSymbols.findIndex(s => s.id === selectedSymbol)
+      : 0
+    const prevIndex = currentIndex <= 0 ? filteredSymbols.length - 1 : currentIndex - 1
+    setSelectedSymbol(filteredSymbols[prevIndex].id)
+  }, [filteredSymbols, selectedSymbol])
+
+  // Keyboard shortcuts handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't handle shortcuts when typing in input fields
+      const target = e.target as HTMLElement
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
+        // Allow Escape to blur input
+        if (e.key === "Escape") {
+          target.blur()
+        }
+        return
+      }
+
+      // Help dialog
+      if (e.key === "?" && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault()
+        setShowHelp(true)
+        return
+      }
+
+      // Close help or deselect
+      if (e.key === "Escape") {
+        e.preventDefault()
+        if (showHelp) {
+          setShowHelp(false)
+        } else {
+          setSelectedSymbol(null)
+        }
+        return
+      }
+
+      // Ctrl/Cmd shortcuts
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key.toLowerCase()) {
+          case "z":
+            e.preventDefault()
+            undo()
+            return
+          case "y":
+            e.preventDefault()
+            redo()
+            return
+          case "s":
+            e.preventDefault()
+            showToast("All changes saved")
+            return
+        }
+      }
+
+      // Single key shortcuts (when not in input)
+      switch (e.key.toLowerCase()) {
+        case "v":
+          if (selectedSymbol) {
+            e.preventDefault()
+            verifySymbol(selectedSymbol)
+          }
+          break
+        case "delete":
+        case "backspace":
+          if (selectedSymbol) {
+            e.preventDefault()
+            deleteSymbol(selectedSymbol)
+          }
+          break
+        case "+":
+        case "=":
+          e.preventDefault()
+          setZoom(prev => Math.min(200, prev + 10))
+          break
+        case "-":
+        case "_":
+          e.preventDefault()
+          setZoom(prev => Math.max(10, prev - 10))
+          break
+        case "tab":
+          e.preventDefault()
+          if (e.shiftKey) {
+            selectPrevSymbol()
+          } else {
+            selectNextSymbol()
+          }
+          break
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [
+    selectedSymbol,
+    showHelp,
+    undo,
+    redo,
+    verifySymbol,
+    deleteSymbol,
+    selectNextSymbol,
+    selectPrevSymbol,
+    showToast,
+  ])
+
+  // Focus container for keyboard events
+  useEffect(() => {
+    containerRef.current?.focus()
+  }, [])
+
   return (
-    <div className="h-[calc(100vh-8rem)] flex flex-col">
+    <div
+      ref={containerRef}
+      className="h-[calc(100vh-8rem)] flex flex-col outline-none"
+      tabIndex={-1}
+    >
       {/* Header */}
       <div className="flex items-center justify-between pb-4 border-b">
         <div className="flex items-center gap-4">
@@ -265,21 +639,47 @@ export function ValidationPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={undo}
+            disabled={undoStack.length === 0}
+            title="Undo (Ctrl+Z)"
+          >
             <Undo className="h-4 w-4 mr-1" />
             Undo
+            {undoStack.length > 0 && (
+              <span className="ml-1 text-xs text-muted-foreground">({undoStack.length})</span>
+            )}
           </Button>
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={redo}
+            disabled={redoStack.length === 0}
+            title="Redo (Ctrl+Y)"
+          >
             <Redo className="h-4 w-4 mr-1" />
             Redo
+            {redoStack.length > 0 && (
+              <span className="ml-1 text-xs text-muted-foreground">({redoStack.length})</span>
+            )}
           </Button>
           <Button variant="outline" size="sm">
             <Download className="h-4 w-4 mr-1" />
             Export
           </Button>
-          <Button size="sm">
+          <Button size="sm" onClick={() => showToast("All changes saved")} title="Save (Ctrl+S)">
             <Save className="h-4 w-4 mr-1" />
             Save
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowHelp(true)}
+            title="Keyboard shortcuts (?)"
+          >
+            <Keyboard className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -521,6 +921,7 @@ export function ValidationPage() {
                     size="sm"
                     className="flex-1"
                     onClick={() => deleteSymbol(selectedSymbol)}
+                    title="Delete (Delete/Backspace)"
                   >
                     Delete
                   </Button>
@@ -529,16 +930,26 @@ export function ValidationPage() {
                     className="flex-1"
                     onClick={() => verifySymbol(selectedSymbol)}
                     disabled={symbols.find(s => s.id === selectedSymbol)?.validated}
+                    title="Verify (V)"
                   >
                     <CheckCircle className="h-4 w-4 mr-1" />
                     {symbols.find(s => s.id === selectedSymbol)?.validated ? "Validated" : "Validate"}
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  Press ? for keyboard shortcuts
+                </p>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Toast notification */}
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+
+      {/* Keyboard shortcuts help */}
+      {showHelp && <KeyboardShortcutsHelp onClose={() => setShowHelp(false)} />}
     </div>
   )
 }

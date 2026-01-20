@@ -237,3 +237,123 @@ test.describe('Validation Interface - Component Types', () => {
     await expect(lineIndicator).toBeVisible()
   })
 })
+
+test.describe('Validation Interface - Keyboard Shortcuts', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupAuth(page)
+  })
+
+  test('should show keyboard shortcuts help button', async ({ page }) => {
+    await page.goto('/drawings/1/validate')
+
+    // Keyboard help button should be visible in toolbar
+    const helpButton = page.locator('button[title*="Keyboard shortcuts"]')
+    await expect(helpButton).toBeVisible()
+  })
+
+  test('should open keyboard shortcuts dialog when pressing ?', async ({ page }) => {
+    await page.goto('/drawings/1/validate')
+
+    // Press ? key to open help
+    await page.keyboard.press('Shift+/')  // ? is Shift+/
+
+    // Help dialog should appear
+    await expect(page.getByText('Keyboard Shortcuts')).toBeVisible()
+    await expect(page.getByText('Verify selected item')).toBeVisible()
+    await expect(page.getByText('Undo last action')).toBeVisible()
+  })
+
+  test('should close keyboard shortcuts dialog when pressing Escape', async ({ page }) => {
+    await page.goto('/drawings/1/validate')
+
+    // Open help dialog
+    await page.keyboard.press('Shift+/')
+
+    await expect(page.getByText('Keyboard Shortcuts')).toBeVisible()
+
+    // Press Escape to close
+    await page.keyboard.press('Escape')
+
+    await expect(page.getByText('Keyboard Shortcuts')).not.toBeVisible()
+  })
+
+  test('should show hint about keyboard shortcuts in edit panel', async ({ page }) => {
+    await page.goto('/drawings/1/validate')
+
+    // Select a component
+    await page.getByText('V-101', { exact: true }).click()
+
+    // Edit panel should show keyboard shortcut hint
+    await expect(page.getByText('Press ? for keyboard shortcuts')).toBeVisible()
+  })
+
+  test('should have undo/redo buttons with disabled state when stack is empty', async ({ page }) => {
+    await page.goto('/drawings/1/validate')
+
+    // Undo button should be disabled initially
+    const undoButton = page.getByRole('button', { name: /undo/i })
+    await expect(undoButton).toBeDisabled()
+
+    // Redo button should be disabled initially
+    const redoButton = page.getByRole('button', { name: /redo/i })
+    await expect(redoButton).toBeDisabled()
+  })
+
+  test('should navigate to next item with Tab key', async ({ page }) => {
+    await page.goto('/drawings/1/validate')
+
+    // Press Tab to select first item
+    await page.keyboard.press('Tab')
+
+    // An item should be selected (edit panel should appear)
+    await expect(page.getByText('Edit Component')).toBeVisible()
+  })
+
+  test('should zoom in with + key', async ({ page }) => {
+    await page.goto('/drawings/1/validate')
+
+    // Get initial zoom level
+    const zoomText = page.locator('text=/\\d+%/')
+    const initialZoom = await zoomText.first().textContent()
+
+    // Press + to zoom in
+    await page.keyboard.press('=')
+
+    // Zoom should have increased
+    const newZoom = await zoomText.first().textContent()
+    expect(newZoom).not.toBe(initialZoom)
+  })
+
+  test('should zoom out with - key', async ({ page }) => {
+    await page.goto('/drawings/1/validate')
+
+    // First zoom in
+    await page.keyboard.press('=')
+    await page.keyboard.press('=')
+
+    // Get current zoom level
+    const zoomText = page.locator('text=/\\d+%/')
+    const currentZoom = await zoomText.first().textContent()
+
+    // Press - to zoom out
+    await page.keyboard.press('-')
+
+    // Zoom should have decreased
+    const newZoom = await zoomText.first().textContent()
+    expect(newZoom).not.toBe(currentZoom)
+  })
+
+  test('should deselect item when pressing Escape', async ({ page }) => {
+    await page.goto('/drawings/1/validate')
+
+    // Select a component
+    await page.getByText('V-101', { exact: true }).click()
+    await expect(page.getByText('Edit Component')).toBeVisible()
+
+    // Press Escape to deselect
+    await page.keyboard.press('Escape')
+
+    // Edit panel should be hidden
+    await expect(page.getByText('Edit Component')).not.toBeVisible()
+  })
+})
