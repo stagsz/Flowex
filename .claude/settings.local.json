@@ -21,7 +21,8 @@
       "Bash(powershell -Command \"railway login --help 2>&1\")",
       "Bash(railway whoami:*)",
       "Bash(git push:*)",
-      "Bash(dir /s /b D:Flowexml)"
+      "Bash(dir /s /b D:Flowexml)",
+      "Bash(git pull:*)"
     ]
   }
 }
