@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.api.routes import auth, cloud, drawings, exports, projects
+from app.api.routes import auth, cloud, drawings, exports, projects, users
 from app.core.config import settings
 from app.core.logging import (
     generate_request_id,
@@ -159,6 +159,7 @@ app.include_router(projects.router, prefix="/api/v1")
 app.include_router(drawings.router, prefix="/api/v1")
 app.include_router(exports.router, prefix="/api/v1")
 app.include_router(cloud.router, prefix="/api/v1")
+app.include_router(users.router, prefix="/api/v1")
 
 
 @app.get("/health")

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import {
   Card,
@@ -10,11 +10,23 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
   FolderKanban,
   Plus,
   Search,
   FileImage,
   MoreVertical,
+  Loader2,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -22,6 +34,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { api } from "@/lib/api"
 
 interface Project {
   id: string
@@ -34,40 +47,102 @@ interface Project {
 
 export function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [projects, setProjects] = useState<Project[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
+  const [newProjectName, setNewProjectName] = useState("")
+  const [newProjectDescription, setNewProjectDescription] = useState("")
 
-  // Mock data - would come from API
-  const projects: Project[] = [
-    {
-      id: "1",
-      name: "Refinery Unit A",
-      description: "Main refinery process unit P&IDs",
-      drawingCount: 24,
-      createdAt: "2026-01-10",
-      updatedAt: "2026-01-19",
-    },
-    {
-      id: "2",
-      name: "Chemical Plant B",
-      description: "Chemical processing facility documentation",
-      drawingCount: 18,
-      createdAt: "2026-01-05",
-      updatedAt: "2026-01-18",
-    },
-    {
-      id: "3",
-      name: "Power Station C",
-      description: "Utility and power generation P&IDs",
-      drawingCount: 6,
-      createdAt: "2026-01-15",
-      updatedAt: "2026-01-17",
-    },
-  ]
+  // Fetch projects from API
+  useEffect(() => {
+    async function fetchProjects() {
+      try {
+        const response = await api.get("/api/v1/projects/")
+        if (response.ok) {
+          const data = await response.json()
+          setProjects(
+            data.map((p: {
+              id: string
+              name: string
+              description?: string
+              created_at?: string
+              updated_at?: string
+            }) => ({
+              id: p.id,
+              name: p.name,
+              description: p.description || "",
+              drawingCount: 0, // Would need separate API call or include in response
+              createdAt: p.created_at ? new Date(p.created_at).toLocaleDateString() : "",
+              updatedAt: p.updated_at ? new Date(p.updated_at).toLocaleDateString() : "",
+            }))
+          )
+        }
+      } catch {
+        // API unavailable, show empty state
+        setProjects([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchProjects()
+  }, [])
+
+  const createProject = async () => {
+    if (!newProjectName.trim() || isCreating) return
+
+    setIsCreating(true)
+    try {
+      const response = await api.post("/api/v1/projects/", {
+        name: newProjectName.trim(),
+        description: newProjectDescription.trim(),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        const newProject: Project = {
+          id: data.id,
+          name: data.name,
+          description: data.description || "",
+          drawingCount: 0,
+          createdAt: new Date().toLocaleDateString(),
+          updatedAt: new Date().toLocaleDateString(),
+        }
+        setProjects((prev) => [newProject, ...prev])
+        setNewProjectName("")
+        setNewProjectDescription("")
+        setIsDialogOpen(false)
+      }
+    } catch {
+      // Handle error silently for now
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  const deleteProject = async (projectId: string) => {
+    try {
+      const response = await api.delete(`/api/v1/projects/${projectId}`)
+      if (response.ok) {
+        setProjects((prev) => prev.filter((p) => p.id !== projectId))
+      }
+    } catch {
+      // Handle error silently
+    }
+  }
 
   const filteredProjects = projects.filter(
     (project) =>
       project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       project.description.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -78,12 +153,63 @@ export function ProjectsPage() {
             Manage your P&ID digitization projects
           </p>
         </div>
-        <Button asChild>
-          <Link to="/projects/new">
-            <Plus className="mr-2 h-4 w-4" />
-            New Project
-          </Link>
-        </Button>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              New Project
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create New Project</DialogTitle>
+              <DialogDescription>
+                Create a new project to organize your P&ID drawings.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="name">Project Name</Label>
+                <Input
+                  id="project-name"
+                  name="project-name"
+                  autoComplete="off"
+                  placeholder="e.g., Refinery Unit A"
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && createProject()}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="description">Description (optional)</Label>
+                <Textarea
+                  id="description"
+                  placeholder="Brief description of the project..."
+                  value={newProjectDescription}
+                  onChange={(e) => setNewProjectDescription(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={createProject}
+                disabled={isCreating || !newProjectName.trim()}
+              >
+                {isCreating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  "Create Project"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="flex items-center gap-4">
@@ -109,11 +235,9 @@ export function ProjectsPage() {
                 : "Get started by creating your first project"}
             </p>
             {!searchQuery && (
-              <Button className="mt-4" asChild>
-                <Link to="/projects/new">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Project
-                </Link>
+              <Button className="mt-4" onClick={() => setIsDialogOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Create Project
               </Button>
             )}
           </CardContent>
@@ -126,7 +250,7 @@ export function ProjectsPage() {
                 <div className="space-y-1">
                   <CardTitle className="text-lg">
                     <Link
-                      to={`/projects/${project.id}`}
+                      to={`/drawings?project=${project.id}`}
                       className="hover:underline"
                     >
                       {project.name}
@@ -142,12 +266,15 @@ export function ProjectsPage() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem asChild>
-                      <Link to={`/projects/${project.id}`}>View Details</Link>
+                      <Link to={`/drawings?project=${project.id}`}>View Drawings</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link to={`/projects/${project.id}/edit`}>Edit</Link>
+                      <Link to={`/upload?project=${project.id}`}>Upload Drawings</Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="text-destructive">
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => deleteProject(project.id)}
+                    >
                       Delete
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -159,7 +286,7 @@ export function ProjectsPage() {
                     <FileImage className="h-4 w-4" />
                     <span>{project.drawingCount} drawings</span>
                   </div>
-                  <span>Updated {project.updatedAt}</span>
+                  {project.updatedAt && <span>Updated {project.updatedAt}</span>}
                 </div>
               </CardContent>
             </Card>

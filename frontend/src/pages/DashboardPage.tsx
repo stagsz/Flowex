@@ -192,7 +192,7 @@ export function DashboardPage() {
               </Link>
             </Button>
             <Button variant="outline" className="justify-start" asChild>
-              <Link to="/projects/new">
+              <Link to="/projects">
                 <FolderKanban className="mr-2 h-4 w-4" />
                 Create new project
               </Link>
