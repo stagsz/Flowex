@@ -719,3 +719,210 @@ class TestStatisticsCalculation:
         # F-101 should be flagged
         assert len(flagged) >= 1
         assert any(item["tag"] == "F-101" for item in flagged)
+
+
+class TestValidationChecklistExport:
+    """Tests for validation checklist export (CHK-06)."""
+
+    def test_export_checklist_pdf(
+        self, mock_drawing, mock_symbols, mock_lines, export_metadata
+    ):
+        """Test validation checklist export to PDF."""
+        service = DataListExportService()
+
+        output_path = service.export_validation_checklist(
+            mock_drawing,
+            mock_symbols,
+            mock_lines,
+            export_metadata,
+            ExportFormat.PDF,
+            include_unverified=True,
+        )
+
+        assert output_path.exists()
+        assert output_path.suffix == ".pdf"
+        assert "Validation_Checklist" in output_path.name
+        assert output_path.stat().st_size > 0
+
+        output_path.unlink()
+
+    def test_export_checklist_xlsx(
+        self, mock_drawing, mock_symbols, mock_lines, export_metadata
+    ):
+        """Test validation checklist export to Excel."""
+        service = DataListExportService()
+
+        output_path = service.export_validation_checklist(
+            mock_drawing,
+            mock_symbols,
+            mock_lines,
+            export_metadata,
+            ExportFormat.XLSX,
+            include_unverified=True,
+        )
+
+        assert output_path.exists()
+        assert output_path.suffix == ".xlsx"
+        assert "Validation_Checklist" in output_path.name
+
+        output_path.unlink()
+
+    def test_export_checklist_csv(
+        self, mock_drawing, mock_symbols, mock_lines, export_metadata
+    ):
+        """Test validation checklist export to CSV."""
+        service = DataListExportService()
+
+        output_path = service.export_validation_checklist(
+            mock_drawing,
+            mock_symbols,
+            mock_lines,
+            export_metadata,
+            ExportFormat.CSV,
+            include_unverified=True,
+        )
+
+        assert output_path.exists()
+        assert output_path.suffix == ".csv"
+
+        # Verify content has required columns
+        content = output_path.read_text()
+        assert "Category" in content
+        assert "Tag Number" in content
+        assert "Status" in content
+        assert "Confidence" in content
+        assert "Flagged" in content
+
+        # Verify data is present
+        assert "P-101" in content  # Equipment
+        assert "FT-101" in content  # Instrument
+        assert "V-101" in content  # Valve
+
+        output_path.unlink()
+
+    def test_export_checklist_includes_verification_status(
+        self, mock_drawing, mock_symbols, mock_lines, export_metadata
+    ):
+        """Test that checklist shows verified/pending status correctly."""
+        service = DataListExportService()
+
+        output_path = service.export_validation_checklist(
+            mock_drawing,
+            mock_symbols,
+            mock_lines,
+            export_metadata,
+            ExportFormat.CSV,
+            include_unverified=True,
+        )
+
+        content = output_path.read_text()
+
+        # P-101 is verified
+        assert "Verified" in content
+        # F-101 is unverified (pending)
+        assert "Pending" in content
+
+        output_path.unlink()
+
+    def test_export_checklist_includes_lines(
+        self, mock_drawing, mock_symbols, mock_lines, export_metadata
+    ):
+        """Test that checklist includes line items."""
+        service = DataListExportService()
+
+        output_path = service.export_validation_checklist(
+            mock_drawing,
+            mock_symbols,
+            mock_lines,
+            export_metadata,
+            ExportFormat.CSV,
+            include_unverified=True,
+        )
+
+        content = output_path.read_text()
+
+        # Lines should be included
+        assert "Line" in content
+        assert "A1" in content  # Pipe class from mock line
+
+        output_path.unlink()
+
+    def test_export_checklist_filters_unverified(
+        self, mock_drawing, mock_symbols, mock_lines, export_metadata
+    ):
+        """Test that include_unverified=False filters out unverified items."""
+        service = DataListExportService()
+
+        output_path = service.export_validation_checklist(
+            mock_drawing,
+            mock_symbols,
+            mock_lines,
+            export_metadata,
+            ExportFormat.CSV,
+            include_unverified=False,
+        )
+
+        content = output_path.read_text()
+
+        # F-101 is unverified, should not be included
+        assert "F-101" not in content
+        # P-101 is verified, should be included
+        assert "P-101" in content
+
+        output_path.unlink()
+
+    def test_export_checklist_excludes_deleted(
+        self, mock_drawing, mock_symbols, mock_lines, export_metadata
+    ):
+        """Test that deleted items are always excluded."""
+        # Mark one symbol as deleted
+        mock_symbols[0].is_deleted = True
+
+        service = DataListExportService()
+
+        output_path = service.export_validation_checklist(
+            mock_drawing,
+            mock_symbols,
+            mock_lines,
+            export_metadata,
+            ExportFormat.CSV,
+            include_unverified=True,
+        )
+
+        content = output_path.read_text()
+
+        # P-101 was marked as deleted - check it doesn't appear as Equipment
+        # (Note: The line number 6"-P-101-A1 may contain P-101, but that's different)
+        lines = content.split("\n")
+        equipment_lines = [line for line in lines if line.startswith("Equipment,")]
+        # P-101 should not appear in any equipment row
+        for line in equipment_lines:
+            assert "P-101" not in line, f"Deleted symbol P-101 should not appear in: {line}"
+
+        output_path.unlink()
+
+    def test_export_checklist_marks_flagged_items(
+        self, mock_drawing, mock_symbols, mock_lines, export_metadata
+    ):
+        """Test that low confidence items are marked as flagged."""
+        service = DataListExportService()
+
+        output_path = service.export_validation_checklist(
+            mock_drawing,
+            mock_symbols,
+            mock_lines,
+            export_metadata,
+            ExportFormat.CSV,
+            include_unverified=True,
+        )
+
+        content = output_path.read_text()
+
+        # F-101 has low confidence (0.65), should be flagged
+        # Check that "Yes" appears for flagged column
+        lines = content.split("\n")
+        f101_line = [line for line in lines if "F-101" in line]
+        assert len(f101_line) > 0
+        assert "Yes" in f101_line[0]  # Flagged = Yes
+
+        output_path.unlink()

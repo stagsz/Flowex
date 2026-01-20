@@ -51,6 +51,13 @@ class DataListExportRequest(BaseModel):
     include_unverified: bool = False
 
 
+class ChecklistExportRequest(BaseModel):
+    """Request body for validation checklist export."""
+
+    format: str = "pdf"  # pdf, xlsx, csv
+    include_unverified: bool = True
+
+
 class ExportJobResponse(BaseModel):
     """Response for export job creation."""
 
@@ -422,6 +429,101 @@ async def export_comparison_report(
         status="processing",
         message="Comparison report export job has been queued",
     )
+
+
+# Validation Checklist Export Endpoint
+
+
+@router.post(
+    "/drawings/{drawing_id}/checklist",
+    response_model=ExportJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def export_validation_checklist(
+    drawing_id: UUID,
+    request: ChecklistExportRequest,
+    background_tasks: BackgroundTasks,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> ExportJobResponse:
+    """
+    Export validation checklist as PDF, Excel, or CSV.
+
+    The checklist shows all extracted items with their verification status,
+    grouped by category. Useful for auditing and sign-off purposes.
+    """
+    _get_drawing_with_access_check(drawing_id, db, current_user)
+
+    try:
+        export_format = ExportFormat(request.format)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid format. Must be one of: {[f.value for f in ExportFormat]}",
+        )
+
+    import uuid
+
+    job_id = str(uuid.uuid4())
+    _export_jobs[job_id] = {
+        "status": "processing",
+        "drawing_id": str(drawing_id),
+        "export_type": "checklist",
+        "file_path": None,
+        "error": None,
+    }
+
+    background_tasks.add_task(
+        _process_checklist_export,
+        job_id,
+        drawing_id,
+        export_format,
+        request.include_unverified,
+    )
+
+    return ExportJobResponse(
+        job_id=job_id,
+        drawing_id=str(drawing_id),
+        export_type="checklist",
+        status="processing",
+        message="Validation checklist export job has been queued",
+    )
+
+
+async def _process_checklist_export(
+    job_id: str,
+    drawing_id: UUID,
+    export_format: ExportFormat,
+    include_unverified: bool,
+) -> None:
+    """Background task to process validation checklist export."""
+    from app.core.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        drawing = db.query(Drawing).filter(Drawing.id == drawing_id).first()
+        if not drawing:
+            _export_jobs[job_id]["status"] = "failed"
+            _export_jobs[job_id]["error"] = "Drawing not found"
+            return
+
+        symbols, lines, _ = _get_drawing_data(db, drawing_id)
+        metadata = _create_export_metadata(drawing, db)
+
+        service = DataListExportService()
+        output_path = service.export_validation_checklist(
+            drawing, symbols, lines, metadata, export_format, include_unverified
+        )
+
+        _export_jobs[job_id]["status"] = "completed"
+        _export_jobs[job_id]["file_path"] = str(output_path)
+
+    except Exception as e:
+        logger.exception(f"Checklist export failed for job {job_id}")
+        _export_jobs[job_id]["status"] = "failed"
+        _export_jobs[job_id]["error"] = str(e)
+    finally:
+        db.close()
 
 
 async def _process_report_export(

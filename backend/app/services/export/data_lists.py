@@ -50,6 +50,7 @@ class ListType(str, Enum):
     INSTRUMENT = "instrument"
     VALVE = "valve"
     MTO = "mto"
+    CHECKLIST = "checklist"
 
 
 @dataclass
@@ -398,6 +399,30 @@ class DataListExportService:
             # For Excel/CSV, export as simple list
             return self._export_report_tabular(
                 drawing, stats, flagged_items, metadata, format
+            )
+
+    def export_validation_checklist(
+        self,
+        drawing: "Drawing",
+        symbols: list["Symbol"],
+        lines: list["Line"],
+        metadata: ExportMetadata,
+        format: ExportFormat = ExportFormat.PDF,
+        include_unverified: bool = True,
+    ) -> Path:
+        """
+        Export validation checklist with all items and their verification status.
+
+        This is the item-by-item checklist that allows users to track what
+        has been reviewed during the validation process.
+        """
+        if format == ExportFormat.PDF:
+            return self._export_checklist_pdf(
+                drawing, symbols, lines, metadata, include_unverified
+            )
+        else:
+            return self._export_checklist_tabular(
+                drawing, symbols, lines, metadata, format, include_unverified
             )
 
     def _export_list(
@@ -838,6 +863,317 @@ class DataListExportService:
 
         return self._export_list(
             headers, rows, metadata, "Comparison_Report", format
+        )
+
+    def _export_checklist_pdf(
+        self,
+        drawing: "Drawing",
+        symbols: list["Symbol"],
+        lines: list["Line"],
+        metadata: ExportMetadata,
+        include_unverified: bool,
+    ) -> Path:
+        """Export validation checklist as PDF."""
+        filename = f"{metadata.drawing_number}_Validation_Checklist.pdf"
+        output_path = self.output_dir / filename
+
+        doc = SimpleDocTemplate(
+            str(output_path),
+            pagesize=A4,
+            rightMargin=15 * mm,
+            leftMargin=15 * mm,
+            topMargin=15 * mm,
+            bottomMargin=15 * mm,
+        )
+
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            "Title",
+            parent=styles["Heading1"],
+            fontSize=16,
+            alignment=1,
+        )
+        section_style = ParagraphStyle(
+            "Section",
+            parent=styles["Heading2"],
+            fontSize=11,
+            spaceAfter=4 * mm,
+            spaceBefore=6 * mm,
+        )
+
+        elements = []
+
+        # Title
+        elements.append(Paragraph("VALIDATION CHECKLIST", title_style))
+        elements.append(Spacer(1, 6 * mm))
+
+        # Drawing Information
+        info_data = [
+            ["Drawing:", metadata.drawing_number, "Project:", metadata.project_name],
+            ["Revision:", metadata.revision, "Date:", metadata.date],
+        ]
+        info_table = Table(info_data, colWidths=[25 * mm, 55 * mm, 25 * mm, 55 * mm])
+        info_table.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+            ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ]))
+        elements.append(info_table)
+        elements.append(Spacer(1, 6 * mm))
+
+        # Group symbols by category
+        categories = {
+            "Equipment": [],
+            "Instruments": [],
+            "Valves": [],
+            "Other": [],
+        }
+
+        for symbol in symbols:
+            if symbol.is_deleted:
+                continue
+            if not include_unverified and not symbol.is_verified:
+                continue
+
+            category = symbol.category.value
+            if category == "equipment":
+                categories["Equipment"].append(symbol)
+            elif category == "instrument":
+                categories["Instruments"].append(symbol)
+            elif category == "valve":
+                categories["Valves"].append(symbol)
+            else:
+                categories["Other"].append(symbol)
+
+        # Track totals
+        total_items = 0
+        verified_items = 0
+        flagged_items = 0
+
+        # Export each category
+        for cat_name, cat_symbols in categories.items():
+            if not cat_symbols:
+                continue
+
+            elements.append(Paragraph(cat_name.upper(), section_style))
+
+            headers = ["Status", "Tag Number", "Type", "Confidence", "Flagged", "Notes"]
+            rows = []
+
+            for symbol in sorted(cat_symbols, key=lambda s: s.tag_number or ""):
+                status = "✓" if symbol.is_verified else "○"
+                is_flagged = getattr(symbol, "is_flagged", False) or (
+                    symbol.confidence and symbol.confidence < 0.7
+                )
+                flag_indicator = "⚠" if is_flagged else ""
+                confidence = f"{symbol.confidence:.0%}" if symbol.confidence else "-"
+
+                rows.append([
+                    status,
+                    symbol.tag_number or "-",
+                    self._get_description_from_class(symbol.symbol_class),
+                    confidence,
+                    flag_indicator,
+                    "",  # Empty notes column for manual entry
+                ])
+
+                total_items += 1
+                if symbol.is_verified:
+                    verified_items += 1
+                if is_flagged:
+                    flagged_items += 1
+
+            # Create table with appropriate column widths
+            col_widths = [12 * mm, 30 * mm, 55 * mm, 22 * mm, 15 * mm, 40 * mm]
+            table = Table([headers] + rows, colWidths=col_widths, repeatRows=1)
+            table.setStyle(TableStyle([
+                # Header
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#4472C4")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 8),
+                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                # Data
+                ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 1), (-1, -1), 8),
+                ("ALIGN", (0, 1), (0, -1), "CENTER"),  # Status column centered
+                ("ALIGN", (3, 1), (4, -1), "CENTER"),  # Confidence and Flag centered
+                # Grid
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                # Row backgrounds
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F2F2F2")]),
+                # Padding
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]))
+            elements.append(table)
+
+        # Lines section
+        active_lines = [ln for ln in lines if not ln.is_deleted and (include_unverified or ln.is_verified)]
+        if active_lines:
+            elements.append(Paragraph("LINES", section_style))
+
+            headers = ["Status", "Line Number", "Spec", "Pipe Class", "Confidence", "Flagged", "Notes"]
+            rows = []
+
+            for line in sorted(active_lines, key=lambda ln: ln.line_number or ""):
+                status = "✓" if line.is_verified else "○"
+                is_flagged = getattr(line, "is_flagged", False) or (
+                    line.confidence and line.confidence < 0.7
+                )
+                flag_indicator = "⚠" if is_flagged else ""
+                confidence = f"{line.confidence:.0%}" if line.confidence else "-"
+
+                rows.append([
+                    status,
+                    line.line_number or "-",
+                    line.line_spec or "-",
+                    line.pipe_class or "-",
+                    confidence,
+                    flag_indicator,
+                    "",
+                ])
+
+                total_items += 1
+                if line.is_verified:
+                    verified_items += 1
+                if is_flagged:
+                    flagged_items += 1
+
+            col_widths = [12 * mm, 30 * mm, 35 * mm, 25 * mm, 20 * mm, 15 * mm, 35 * mm]
+            table = Table([headers] + rows, colWidths=col_widths, repeatRows=1)
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#4472C4")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 8),
+                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 1), (-1, -1), 8),
+                ("ALIGN", (0, 1), (0, -1), "CENTER"),
+                ("ALIGN", (4, 1), (5, -1), "CENTER"),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F2F2F2")]),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]))
+            elements.append(table)
+
+        # Summary section
+        elements.append(Spacer(1, 10 * mm))
+        elements.append(Paragraph("SUMMARY", section_style))
+
+        completion_pct = (verified_items / total_items * 100) if total_items > 0 else 0
+        summary_data = [
+            ["Total Items:", str(total_items)],
+            ["Verified:", f"{verified_items} ({completion_pct:.1f}%)"],
+            ["Pending:", str(total_items - verified_items)],
+            ["Flagged for Review:", str(flagged_items)],
+        ]
+        summary_table = Table(summary_data, colWidths=[45 * mm, 40 * mm])
+        summary_table.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        elements.append(summary_table)
+
+        # Legend
+        elements.append(Spacer(1, 8 * mm))
+        legend_text = "Legend: ✓ = Verified, ○ = Pending, ⚠ = Flagged for Review"
+        elements.append(Paragraph(legend_text, styles["Italic"]))
+
+        # Signature section
+        elements.append(Spacer(1, 15 * mm))
+        sig_data = [
+            ["Validated By:", "_" * 30, "Date:", "_" * 20],
+            ["Approved By:", "_" * 30, "Date:", "_" * 20],
+        ]
+        sig_table = Table(sig_data, colWidths=[30 * mm, 65 * mm, 20 * mm, 45 * mm])
+        sig_table.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(sig_table)
+
+        # Build PDF
+        doc.build(elements)
+
+        logger.info(f"Exported validation checklist: {output_path}")
+        return output_path
+
+    def _export_checklist_tabular(
+        self,
+        drawing: "Drawing",
+        symbols: list["Symbol"],
+        lines: list["Line"],
+        metadata: ExportMetadata,
+        format: ExportFormat,
+        include_unverified: bool,
+    ) -> Path:
+        """Export validation checklist as Excel/CSV format."""
+        headers = [
+            "Category",
+            "Tag Number",
+            "Type",
+            "Status",
+            "Confidence",
+            "Flagged",
+            "Drawing Reference",
+        ]
+        rows = []
+
+        # Process symbols
+        for symbol in symbols:
+            if symbol.is_deleted:
+                continue
+            if not include_unverified and not symbol.is_verified:
+                continue
+
+            category = symbol.category.value.title()
+            status = "Verified" if symbol.is_verified else "Pending"
+            is_flagged = getattr(symbol, "is_flagged", False) or (
+                symbol.confidence and symbol.confidence < 0.7
+            )
+            confidence = f"{symbol.confidence:.0%}" if symbol.confidence else "-"
+
+            rows.append([
+                category,
+                symbol.tag_number or "-",
+                self._get_description_from_class(symbol.symbol_class),
+                status,
+                confidence,
+                "Yes" if is_flagged else "No",
+                metadata.drawing_number,
+            ])
+
+        # Process lines
+        for line in lines:
+            if line.is_deleted:
+                continue
+            if not include_unverified and not line.is_verified:
+                continue
+
+            status = "Verified" if line.is_verified else "Pending"
+            is_flagged = getattr(line, "is_flagged", False) or (
+                line.confidence and line.confidence < 0.7
+            )
+            confidence = f"{line.confidence:.0%}" if line.confidence else "-"
+
+            rows.append([
+                "Line",
+                line.line_number or "-",
+                line.pipe_class or "-",
+                status,
+                confidence,
+                "Yes" if is_flagged else "No",
+                metadata.drawing_number,
+            ])
+
+        return self._export_list(
+            headers, rows, metadata, "Validation_Checklist", format
         )
 
     # Helper methods
