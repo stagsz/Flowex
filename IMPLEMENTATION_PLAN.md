@@ -8,8 +8,10 @@
 
 ## Current Focus
 
-**Phase 8: Testing & Polish** - AI validation complete, ready for beta testing.
-- Staging URL: Railway (backend) + Vercel (frontend)
+**Phase 8: Testing & Polish** - Production deployed, ready for beta testing.
+- **Production URLs:**
+  - Backend: https://flowex-production-30eb.up.railway.app
+  - Frontend: https://frontend-xi-seven-28.vercel.app
 - Security: Fixed open redirect vulnerability (ff0c836)
 - Security: Added rate limiting to auth endpoints (a550134)
 - Security: Added security headers middleware (73b6fca)
@@ -372,7 +374,10 @@ _None_
   - Supabase for auth, database, and storage
   - Upstash for Redis
 - [ ] Beta testing with pilot customers
-- [ ] Deploy to production
+- [x] Deploy to production (Supabase stack) - `2026-01-20`
+  - Backend: https://flowex-production-30eb.up.railway.app
+  - Frontend: https://frontend-xi-seven-28.vercel.app
+  - Health checks passing, structured logging with correlation IDs working
 
 ---
 
