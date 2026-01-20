@@ -13,7 +13,8 @@ from torchvision.models.detection.backbone_utils import BackboneWithFPN
 from torchvision.models.detection.rpn import AnchorGenerator
 from torchvision.ops import misc as misc_nn_ops
 
-from symbol_classes import NUM_CLASSES
+# Default number of classes (can be overridden)
+NUM_CLASSES = 50
 
 
 def create_symbol_detector(

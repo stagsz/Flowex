@@ -11,6 +11,7 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms as T
+from torchvision.transforms import InterpolationMode
 
 
 class PIDDataset(Dataset):
@@ -131,6 +132,41 @@ class Compose:
         return image, target
 
 
+class Resize:
+    """Resize image and bounding boxes to max size."""
+
+    def __init__(self, max_size: int = 1024):
+        self.max_size = max_size
+
+    def __call__(self, image, target):
+        # Get original size
+        if hasattr(image, 'size'):
+            orig_w, orig_h = image.size
+        else:
+            orig_h, orig_w = image.shape[-2:]
+
+        # Calculate scale
+        scale = min(self.max_size / orig_w, self.max_size / orig_h)
+
+        if scale < 1.0:
+            # Resize image
+            new_w = int(orig_w * scale)
+            new_h = int(orig_h * scale)
+
+            if hasattr(image, 'resize'):
+                image = image.resize((new_w, new_h), Image.BILINEAR)
+            else:
+                image = T.functional.resize(image, (new_h, new_w))
+
+            # Scale bounding boxes
+            if "boxes" in target and len(target["boxes"]) > 0:
+                boxes = target["boxes"].clone().float()
+                boxes *= scale
+                target["boxes"] = boxes
+
+        return image, target
+
+
 class ToTensor:
     """Convert PIL Image to Tensor."""
 
@@ -152,8 +188,12 @@ class RandomHorizontalFlip:
 
             # Flip bounding boxes
             if "boxes" in target and len(target["boxes"]) > 0:
-                _, _, width = image.shape
-                boxes = target["boxes"]
+                # Get width from PIL image or tensor
+                if hasattr(image, 'size'):
+                    width = image.size[0]  # PIL Image
+                else:
+                    width = image.shape[-1]  # Tensor
+                boxes = target["boxes"].clone()
                 boxes[:, [0, 2]] = width - boxes[:, [2, 0]]
                 target["boxes"] = boxes
 
@@ -173,28 +213,31 @@ class ColorJitter:
         self.jitter = T.ColorJitter(brightness, contrast, saturation, hue)
 
     def __call__(self, image, target):
-        # ColorJitter expects PIL or tensor
-        if isinstance(image, torch.Tensor):
+        # ColorJitter works on PIL images
+        if not isinstance(image, torch.Tensor):
+            image = self.jitter(image)
+        else:
+            # Convert tensor to PIL, apply jitter, convert back
             image = T.ToPILImage()(image)
             image = self.jitter(image)
             image = T.ToTensor()(image)
-        else:
-            image = self.jitter(image)
         return image, target
 
 
-def get_train_transforms():
+def get_train_transforms(max_size: int = 1024):
     """Get transforms for training."""
     return Compose([
+        Resize(max_size),
         RandomHorizontalFlip(0.5),
         ColorJitter(0.2, 0.2, 0.2, 0.1),
         ToTensor(),
     ])
 
 
-def get_val_transforms():
+def get_val_transforms(max_size: int = 1024):
     """Get transforms for validation."""
     return Compose([
+        Resize(max_size),
         ToTensor(),
     ])
 

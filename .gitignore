@@ -51,6 +51,7 @@ npm-debug.log*
 *.onnx
 *.pkl
 ml/data/
+ml/DigitizePID_Dataset/
 ml/models/*.pt
 ml/models/*.pth
 

@@ -17,7 +17,9 @@ from torch.utils.data import DataLoader, random_split
 
 from dataset import PIDDataset, collate_fn, get_train_transforms, get_val_transforms
 from model import SymbolDetector
-from symbol_classes import NUM_CLASSES
+
+# Default to 50 ISO classes, but can be overridden for other datasets
+NUM_CLASSES = 50
 
 
 def train_one_epoch(
@@ -143,6 +145,8 @@ def main():
                         help="Use pretrained backbone")
     parser.add_argument("--confidence-threshold", type=float, default=0.5,
                         help="Confidence threshold for predictions")
+    parser.add_argument("--num-classes", type=int, default=None,
+                        help="Number of classes (auto-detected if not specified)")
 
     # Output arguments
     parser.add_argument("--output", "-o", type=str, default="models",
@@ -176,6 +180,14 @@ def main():
     print(f"Loading dataset from {args.data}...")
     full_dataset = PIDDataset(args.data, transforms=get_train_transforms())
     print(f"Total samples: {len(full_dataset)}")
+
+    # Auto-detect number of classes from dataset
+    if args.num_classes is None:
+        num_classes = len(full_dataset.categories)
+        print(f"Auto-detected {num_classes} classes from dataset")
+    else:
+        num_classes = args.num_classes
+        print(f"Using {num_classes} classes (specified)")
 
     # Split into train/val
     val_size = int(len(full_dataset) * args.val_split)
@@ -213,9 +225,9 @@ def main():
     )
 
     # Create model
-    print(f"Creating model with {NUM_CLASSES + 1} classes...")
+    print(f"Creating model with {num_classes + 1} classes (including background)...")
     model = SymbolDetector(
-        num_classes=NUM_CLASSES + 1,  # +1 for background
+        num_classes=num_classes + 1,  # +1 for background
         pretrained=args.pretrained,
         confidence_threshold=args.confidence_threshold,
     )
