@@ -27,6 +27,8 @@ def download_model_from_supabase(
     """
     Download ML model from Supabase storage.
 
+    Supports both public buckets (direct HTTP) and private buckets (SDK).
+
     Args:
         bucket: Supabase storage bucket name
         remote_path: Path to model in bucket
@@ -35,32 +37,63 @@ def download_model_from_supabase(
     Returns:
         True if download successful, False otherwise
     """
+    import httpx
+
+    if not settings.SUPABASE_URL:
+        logger.warning("SUPABASE_URL not configured, skipping model download")
+        return False
+
+    # Try public URL first (faster, no auth needed)
+    public_url = f"{settings.SUPABASE_URL}/storage/v1/object/public/{bucket}/{remote_path}"
+    logger.info(f"Downloading model from: {public_url}")
+
+    try:
+        with httpx.Client(timeout=120.0) as client:
+            response = client.get(public_url)
+
+            if response.status_code == 200:
+                # Ensure directory exists
+                local_dir = os.path.dirname(local_path)
+                if local_dir:
+                    os.makedirs(local_dir, exist_ok=True)
+
+                # Save to local path
+                with open(local_path, "wb") as f:
+                    f.write(response.content)
+
+                size_mb = os.path.getsize(local_path) / (1024 * 1024)
+                logger.info(f"Model downloaded successfully: {local_path} ({size_mb:.1f} MB)")
+                return True
+            else:
+                logger.warning(f"Public download failed with status {response.status_code}, trying SDK...")
+
+    except Exception as e:
+        logger.warning(f"Public download failed: {e}, trying SDK...")
+
+    # Fallback to SDK for private buckets
     try:
         from supabase import create_client
 
-        if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
-            logger.warning("Supabase not configured, skipping model download")
+        if not settings.SUPABASE_SERVICE_ROLE_KEY:
+            logger.error("SUPABASE_SERVICE_ROLE_KEY not set, cannot download private model")
             return False
-
-        logger.info(f"Downloading model from Supabase: {bucket}/{remote_path}")
 
         client = create_client(
             settings.SUPABASE_URL,
             settings.SUPABASE_SERVICE_ROLE_KEY
         )
 
-        # Download file
         response = client.storage.from_(bucket).download(remote_path)
 
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        local_dir = os.path.dirname(local_path)
+        if local_dir:
+            os.makedirs(local_dir, exist_ok=True)
 
-        # Save to local path
         with open(local_path, "wb") as f:
             f.write(response)
 
         size_mb = os.path.getsize(local_path) / (1024 * 1024)
-        logger.info(f"Model downloaded successfully: {local_path} ({size_mb:.1f} MB)")
+        logger.info(f"Model downloaded via SDK: {local_path} ({size_mb:.1f} MB)")
         return True
 
     except Exception as e:
