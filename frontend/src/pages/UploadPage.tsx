@@ -17,6 +17,7 @@ import {
   CheckCircle,
   AlertCircle,
   File,
+  Plus,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
@@ -42,6 +43,9 @@ export function UploadPage() {
   const [selectedProject, setSelectedProject] = useState("")
   const [projects, setProjects] = useState<Project[]>([])
   const [, setLoadingProjects] = useState(true)
+  const [showCreateProject, setShowCreateProject] = useState(false)
+  const [newProjectName, setNewProjectName] = useState("")
+  const [isCreatingProject, setIsCreatingProject] = useState(false)
 
   // Fetch projects from API
   useEffect(() => {
@@ -72,6 +76,29 @@ export function UploadPage() {
     }
     fetchProjects()
   }, [])
+
+  const createProject = async () => {
+    if (!newProjectName.trim() || isCreatingProject) return
+
+    setIsCreatingProject(true)
+    try {
+      const response = await api.post("/api/v1/projects/", {
+        name: newProjectName.trim(),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        const newProject = { id: data.id, name: data.name }
+        setProjects((prev) => [...prev, newProject])
+        setSelectedProject(data.id)
+        setNewProjectName("")
+        setShowCreateProject(false)
+      }
+    } catch {
+      // Handle error silently for now
+    } finally {
+      setIsCreatingProject(false)
+    }
+  }
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
