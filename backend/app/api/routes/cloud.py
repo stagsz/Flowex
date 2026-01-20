@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_async_db
 from app.core.deps import get_current_user
+from app.core.oauth_state import generate_oauth_state, validate_oauth_state
 from app.models import User
 from app.services.cloud import CloudStorageService
 
@@ -105,10 +106,6 @@ class ConfigureSharePointRequest(BaseModel):
     drive_id: str
 
 
-# In-memory state storage (in production, use Redis)
-_oauth_states: dict[str, dict[str, str]] = {}
-
-
 @router.get("/connections", response_model=list[CloudConnectionResponse])
 async def list_connections(
     current_user: Annotated[User, Depends(get_current_user)],
@@ -148,18 +145,12 @@ async def initiate_connection(
             detail=f"Invalid provider. Must be one of: {', '.join(valid_providers)}",
         )
 
-    service = CloudStorageService(db)
-    state = service.generate_oauth_state(
+    # Generate and store state using centralized Redis-backed storage
+    state = generate_oauth_state(
         current_user.id, current_user.organization_id, provider
     )
 
-    # Store state (service stores in memory, we also store here for callback)
-    _oauth_states[state] = {
-        "user_id": str(current_user.id),
-        "org_id": str(current_user.organization_id),
-        "provider": provider,
-    }
-
+    service = CloudStorageService(db)
     auth_url = service.get_auth_url(provider, state)
     return {"auth_url": auth_url}
 
@@ -172,14 +163,14 @@ async def oauth_callback(
     db: AsyncSession = Depends(get_async_db),
 ) -> RedirectResponse:
     """Handle OAuth callback from cloud provider."""
-    # Validate state
-    if state not in _oauth_states:
+    # Validate and consume state using centralized Redis-backed storage
+    state_data = validate_oauth_state(state)
+    if state_data is None:
         return RedirectResponse(
             url="/settings/integrations?error=invalid_state",
             status_code=status.HTTP_302_FOUND,
         )
 
-    state_data = _oauth_states.pop(state)
     user_id = UUID(state_data["user_id"])
     org_id = UUID(state_data["org_id"])
 

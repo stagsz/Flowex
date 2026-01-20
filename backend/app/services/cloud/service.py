@@ -1,6 +1,5 @@
 """Cloud storage service with token management."""
 
-import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -20,11 +19,14 @@ from app.services.cloud.microsoft import MicrosoftGraphProvider
 
 
 class CloudStorageService:
-    """Service for managing cloud storage connections and operations."""
+    """Service for managing cloud storage connections and operations.
+
+    Note: OAuth state management has been moved to app.core.oauth_state
+    which uses Redis for distributed storage.
+    """
 
     def __init__(self, db: AsyncSession):
         self.db = db
-        self._state_cache: dict[str, dict[str, object]] = {}
 
     def _get_provider(self, connection: CloudConnection) -> CloudStorageProvider:
         """Get the appropriate provider for a connection."""
@@ -48,36 +50,6 @@ class CloudStorageService:
             return GoogleDriveProvider()
         else:
             raise ValueError(f"Unsupported provider type: {provider_type}")
-
-    def generate_oauth_state(
-        self,
-        user_id: uuid.UUID,
-        org_id: uuid.UUID,
-        provider: str,
-    ) -> str:
-        """Generate and store OAuth state for CSRF protection."""
-        state = secrets.token_urlsafe(32)
-        self._state_cache[state] = {
-            "user_id": str(user_id),
-            "org_id": str(org_id),
-            "provider": provider,
-            "created_at": datetime.now(UTC),
-        }
-        return state
-
-    def validate_oauth_state(self, state: str) -> dict[str, object] | None:
-        """Validate and consume OAuth state."""
-        if state not in self._state_cache:
-            return None
-
-        state_data = self._state_cache.pop(state)
-
-        # Check if state is expired (5 minutes)
-        created_at = state_data["created_at"]
-        if isinstance(created_at, datetime) and datetime.now(UTC) - created_at > timedelta(minutes=5):
-            return None
-
-        return state_data
 
     def get_auth_url(self, provider_type: str, state: str) -> str:
         """Get OAuth authorization URL for a provider."""
