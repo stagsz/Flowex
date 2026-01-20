@@ -461,6 +461,10 @@ _None_
   - Resolved variable type confusion between httpx.Client and supabase.Client
   - Mypy now passes with 0 errors (was 3 errors)
 
+- [x] **Add tsbuildinfo to gitignore** - `bdd0654`
+  - Prevent TypeScript build info files from being tracked in git
+  - Build artifacts that shouldn't be committed
+
 ---
 
 ## Technical Decisions
