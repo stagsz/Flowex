@@ -209,7 +209,7 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 1. Click **Add Service** → **GitHub Repo**
 2. Configure:
    - **Root Directory:** `/backend`
-   - **Start Command:** `celery -A app.celery_app worker --loglevel=info`
+   - **Start Command:** `celery -A app.core.celery_app worker --loglevel=info`
 3. Copy the same environment variables from the backend service
 
 ### 3.5 Run Database Migrations

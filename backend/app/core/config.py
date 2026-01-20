@@ -250,7 +250,11 @@ class Settings(BaseSettings):
 
         return health
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore",  # Ignore extra env vars (e.g., RAILWAY_TOKEN from Railway CLI)
+    )
 
 
 settings = Settings()
