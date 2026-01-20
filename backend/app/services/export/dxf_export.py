@@ -4,7 +4,7 @@ import logging
 import tempfile
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -154,7 +154,7 @@ class DXFExportService:
                 drawing_number=drawing.original_filename.rsplit(".", 1)[0],
                 drawing_title=drawing.original_filename,
                 project_name=drawing.project.name if drawing.project else "Unknown",
-                date=datetime.utcnow().strftime("%Y-%m-%d"),
+                date=datetime.now(UTC).strftime("%Y-%m-%d"),
             )
 
         # Initialize DXF document

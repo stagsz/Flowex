@@ -5,7 +5,7 @@ import logging
 import tempfile
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -59,7 +59,7 @@ class ExportMetadata:
     project_name: str
     drawing_number: str
     revision: str = "A"
-    date: str = field(default_factory=lambda: datetime.utcnow().strftime("%Y-%m-%d"))
+    date: str = field(default_factory=lambda: datetime.now(UTC).strftime("%Y-%m-%d"))
     prepared_by: str = "Flowex"
 
 
