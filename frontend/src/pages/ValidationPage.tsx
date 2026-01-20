@@ -25,8 +25,6 @@ import {
   Cloud,
   CloudOff,
   Check,
-  Square,
-  CheckSquare,
   Flag,
   Maximize2,
   Minimize2,
@@ -747,12 +745,6 @@ export function ValidationPage() {
     if (!symbol || symbol.symbolClass === newClass) return
 
     // Determine the new category based on the symbol class
-    const categoryMap: Record<string, "equipment" | "instrument" | "valve" | "other"> = {
-      equipment: "equipment",
-      instrument: "instrument",
-      valve: "valve",
-      other: "other",
-    }
     // Find which category this class belongs to
     let newType: "equipment" | "instrument" | "valve" | "other" = symbol.type
     for (const [category, classes] of Object.entries(SYMBOL_CLASSES_BY_CATEGORY)) {
@@ -1128,6 +1120,18 @@ export function ValidationPage() {
     setSelectedSymbol(filteredSymbols[prevIndex].id)
   }, [filteredSymbols, selectedSymbol])
 
+  // Format relative time for last saved display
+  const formatLastSaved = useCallback((date: Date | null): string => {
+    if (!date) return ""
+    const now = new Date()
+    const diffSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+    if (diffSeconds < 5) return "just now"
+    if (diffSeconds < 60) return `${diffSeconds}s ago`
+    const diffMinutes = Math.floor(diffSeconds / 60)
+    if (diffMinutes < 60) return `${diffMinutes}m ago`
+    return date.toLocaleTimeString()
+  }, [])
+
   // Keyboard shortcuts handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1301,18 +1305,6 @@ export function ValidationPage() {
         clearInterval(autoSaveIntervalRef.current)
       }
     }
-  }, [])
-
-  // Format relative time for last saved display
-  const formatLastSaved = useCallback((date: Date | null): string => {
-    if (!date) return ""
-    const now = new Date()
-    const diffSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-    if (diffSeconds < 5) return "just now"
-    if (diffSeconds < 60) return `${diffSeconds}s ago`
-    const diffMinutes = Math.floor(diffSeconds / 60)
-    if (diffMinutes < 60) return `${diffMinutes}m ago`
-    return date.toLocaleTimeString()
   }, [])
 
   return (
@@ -1700,7 +1692,7 @@ export function ValidationPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     {symbol.flagged && (
-                      <Flag className="h-4 w-4 text-orange-500" title="Flagged for review" />
+                      <span title="Flagged for review"><Flag className="h-4 w-4 text-orange-500" /></span>
                     )}
                     {symbol.validated ? (
                       <CheckCircle className="h-4 w-4 text-green-500" />
@@ -1760,7 +1752,7 @@ export function ValidationPage() {
                   <label className="text-xs text-muted-foreground">Class</label>
                   <Select
                     value={symbols.find(s => s.id === selectedSymbol)?.symbolClass || ""}
-                    onValueChange={(newClass) => updateSymbolClass(selectedSymbol, newClass)}
+                    onValueChange={(newClass: string) => updateSymbolClass(selectedSymbol, newClass)}
                   >
                     <SelectTrigger className="h-8 text-sm">
                       <SelectValue placeholder="Select class">
