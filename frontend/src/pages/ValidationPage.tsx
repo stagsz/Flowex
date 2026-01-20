@@ -32,6 +32,7 @@ import {
   MousePointer2,
   FileText,
   FileSpreadsheet,
+  ClipboardCheck,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
