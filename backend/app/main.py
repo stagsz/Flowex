@@ -16,6 +16,7 @@ from app.core.logging import (
     setup_logging,
 )
 from app.core.rate_limiting import get_limiter
+from app.core.security_headers import SecurityHeadersMiddleware
 
 # Configure logging before anything else
 setup_logging(
@@ -140,6 +141,9 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 # Add request ID middleware first (before CORS)
 app.add_middleware(RequestIDMiddleware)
+
+# Add security headers middleware (after request ID, before CORS)
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

@@ -137,6 +137,33 @@ class Settings(BaseSettings):
     RATE_LIMIT_REFRESH: str = "30/minute"  # Token refresh limit
     RATE_LIMIT_DEFAULT: str = "100/minute"  # Default limit for other endpoints
 
+    # Security Headers Configuration
+    # X-Frame-Options: DENY or SAMEORIGIN (clickjacking protection)
+    SECURITY_X_FRAME_OPTIONS: str = "DENY"
+    # Referrer-Policy: controls referrer information sent with requests
+    SECURITY_REFERRER_POLICY: str = "strict-origin-when-cross-origin"
+    # Permissions-Policy: restrict browser features (formerly Feature-Policy)
+    SECURITY_PERMISSIONS_POLICY: str = (
+        "accelerometer=(), camera=(), geolocation=(), gyroscope=(), "
+        "magnetometer=(), microphone=(), payment=(), usb=()"
+    )
+    # Content-Security-Policy (CSP): restrict resource loading
+    SECURITY_CSP_ENABLED: bool = False  # Disabled by default - can break functionality
+    SECURITY_CSP_DIRECTIVES: str = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "font-src 'self' data:; "
+        "connect-src 'self' https://*.supabase.co wss://*.supabase.co; "
+        "frame-ancestors 'none'"
+    )
+    # HTTP Strict Transport Security (HSTS): force HTTPS
+    SECURITY_HSTS_ENABLED: bool = False  # Enable only in production with valid HTTPS
+    SECURITY_HSTS_MAX_AGE: int = 31536000  # 1 year in seconds
+    SECURITY_HSTS_INCLUDE_SUBDOMAINS: bool = True
+    SECURITY_HSTS_PRELOAD: bool = False  # Only enable after testing
+
     @property
     def is_supabase(self) -> bool:
         """Check if using Supabase as storage provider."""
