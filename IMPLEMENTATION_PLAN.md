@@ -465,6 +465,12 @@ _None_
   - Prevent TypeScript build info files from being tracked in git
   - Build artifacts that shouldn't be committed
 
+- [x] **Fix deprecated datetime.utcnow() calls** - `0fbce7f`
+  - Replaced datetime.utcnow() with datetime.now(UTC) in export services
+  - datetime.utcnow() is deprecated in Python 3.12+ and scheduled for removal
+  - Fixed in dxf_export.py and data_lists.py
+  - Remaining warnings are from third-party libraries (openpyxl, reportlab)
+
 ---
 
 ## Technical Decisions
