@@ -8,13 +8,14 @@
 
 ## Current Focus
 
-**Phase 8: Testing & Polish** - Security hardening complete.
+**Phase 8: Testing & Polish** - Validation UX improvements in progress.
 - Staging URL: Railway (backend) + Vercel (frontend)
 - Security: Fixed open redirect vulnerability (ff0c836)
 - Security: Added rate limiting to auth endpoints (a550134)
 - Security: Added security headers middleware (73b6fca)
 - Security: Added Redis-based OAuth state storage (e514e8c)
-- Next: Beta testing with pilot customers
+- UX: Added keyboard shortcuts and undo/redo to validation interface (942a45c)
+- Next: Additional validation interface polish, then beta testing
 
 ---
 
@@ -222,6 +223,14 @@ _None_
 
 ### Phase 8: Testing & Polish (In Progress)
 
+#### 8.0 Validation UX Improvements
+- [x] Add keyboard shortcuts to validation interface - `942a45c`
+  - V: Verify, Delete: Delete, Ctrl+Z/Y: Undo/Redo, Tab: Navigate
+  - 20-level undo/redo stack with API integration
+  - Toast notifications for user feedback
+  - Keyboard shortcuts help dialog (press ?)
+  - E2E tests for keyboard shortcuts
+
 #### 8.1 Testing
 - [x] Write E2E tests (Playwright) - `a73d247`
   - 65 tests covering auth, dashboard, navigation, upload, and validation flows
@@ -267,6 +276,14 @@ _None_
 ---
 
 ## Backlog (Prioritized)
+
+#### Validation Interface Polish (Remaining from Spec)
+- [ ] Auto-save every 30 seconds with visual indicator
+- [ ] Bulk verification (multi-select checkbox + "Verify All" button)
+- [ ] Flag for review functionality (mark items for human review)
+- [ ] Full-screen mode toggle
+- [ ] Add missing symbol (click-to-place on PDF)
+- [ ] Change symbol type/classification dropdown
 
 #### 8.2 Deployment
 - [x] Set up CI/CD pipeline - `8dcd214`
