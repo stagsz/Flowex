@@ -60,12 +60,13 @@ COPY --chown=appuser:appuser . .
 # Switch to non-root user
 USER appuser
 
-# Expose port
+# Expose port (Railway sets PORT dynamically)
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+# Note: Railway uses its own healthcheck, Docker HEALTHCHECK is ignored
+# HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+#     CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
-# Default command - uvicorn with production settings
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# Default command - Railway overrides this with startCommand from railway.json
+# Use shell form to expand $PORT environment variable
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
