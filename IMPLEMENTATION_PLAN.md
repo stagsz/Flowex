@@ -351,6 +351,12 @@ _None_
   - Added type ignore comments for dynamic imports in inference.py
   - Updated pyproject.toml to ignore missing stubs for third-party libraries
 
+- [x] **Remove debug startup prints from main.py** - `838b975`
+  - Removed temporary debug print statements added for Railway deployment troubleshooting
+  - Fixed E402 (module level import not at top of file) lint errors
+  - Fixed F541 (f-string without placeholders) lint error
+  - Deployment working, debug statements no longer needed
+
 ---
 
 ## Technical Decisions
