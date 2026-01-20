@@ -18,12 +18,14 @@ export async function apiFetch(
 
   // Add Authorization header if token exists
   if (token) {
-    ;(headers as Record<string, string>)["Authorization"] = `Bearer ${token}`
+    const h = headers as Record<string, string>
+    h["Authorization"] = `Bearer ${token}`
   }
 
   // Add Content-Type for JSON bodies (but not for FormData)
   if (options.body && !(options.body instanceof FormData)) {
-    ;(headers as Record<string, string>)["Content-Type"] = "application/json"
+    const h = headers as Record<string, string>
+    h["Content-Type"] = "application/json"
   }
 
   const url = endpoint.startsWith("http") ? endpoint : `${API_URL}${endpoint}`

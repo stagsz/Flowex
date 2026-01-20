@@ -41,6 +41,7 @@ interface AuthState {
 }
 
 // Convert Supabase user to our User format
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function mapSupabaseUser(supabaseUser: SupabaseUser, _session: Session | null): User {
   const metadata = supabaseUser.user_metadata || {}
   const appMetadata = supabaseUser.app_metadata || {}
