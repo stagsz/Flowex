@@ -12,7 +12,8 @@
 - Staging URL: Railway (backend) + Vercel (frontend)
 - Security: Fixed open redirect vulnerability (ff0c836)
 - Security: Added rate limiting to auth endpoints (a550134)
-- Next: Redis-based OAuth state storage, security headers middleware
+- Security: Added security headers middleware (73b6fca)
+- Next: Redis-based OAuth state storage
 
 ---
 
@@ -373,6 +374,19 @@ _None_
   - Configurable limits via environment variables
   - Falls back to in-memory storage if Redis unavailable
   - Added 6 rate limiting tests
+
+- [x] **Add security headers middleware** - `73b6fca`
+  - Implemented OWASP recommended security headers middleware
+  - X-Frame-Options: DENY (clickjacking protection)
+  - X-Content-Type-Options: nosniff (MIME sniffing prevention)
+  - X-XSS-Protection: 1; mode=block (legacy XSS filter)
+  - Referrer-Policy: strict-origin-when-cross-origin
+  - Permissions-Policy: restricts camera, microphone, geolocation, payment, etc.
+  - Content-Security-Policy: configurable, disabled by default
+  - Strict-Transport-Security (HSTS): configurable, disabled by default
+  - Cache-Control: no-store for sensitive endpoints (auth, users, cloud)
+  - All settings configurable via environment variables
+  - Added 24 security header tests
 
 ---
 
