@@ -130,3 +130,121 @@ class TestTokenCreation:
         assert token is not None
         assert isinstance(token, str)
         assert len(token) > 0
+
+
+class TestRedirectUriValidation:
+    """Test redirect URI validation to prevent open redirect attacks."""
+
+    def test_valid_redirect_uri_localhost(self):
+        """Test valid localhost redirect URI is accepted."""
+        response = client.get(
+            "/api/v1/auth/login",
+            params={"provider": "google", "redirect_uri": "http://localhost:5173/callback"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 307  # Redirect to OAuth provider
+
+    def test_valid_redirect_uri_with_path(self):
+        """Test valid redirect URI with path is accepted."""
+        response = client.get(
+            "/api/v1/auth/login",
+            params={"provider": "google", "redirect_uri": "http://localhost:5173/auth/callback"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 307
+
+    def test_invalid_redirect_uri_host_suffix_attack(self):
+        """Test host suffix attack is blocked (e.g., localhost:5173.attacker.com)."""
+        response = client.get(
+            "/api/v1/auth/login",
+            params={
+                "provider": "google",
+                "redirect_uri": "http://localhost:5173.attacker.com/callback",
+            },
+        )
+        assert response.status_code == 400
+        assert "Invalid redirect URI" in response.json()["detail"]
+
+    def test_invalid_redirect_uri_userinfo_attack(self):
+        """Test userinfo attack is blocked (e.g., localhost:5173@attacker.com)."""
+        response = client.get(
+            "/api/v1/auth/login",
+            params={
+                "provider": "google",
+                "redirect_uri": "http://localhost:5173@attacker.com/callback",
+            },
+        )
+        assert response.status_code == 400
+        assert "Invalid redirect URI" in response.json()["detail"]
+
+    def test_invalid_redirect_uri_different_host(self):
+        """Test completely different host is blocked."""
+        response = client.get(
+            "/api/v1/auth/login",
+            params={"provider": "google", "redirect_uri": "http://attacker.com/callback"},
+        )
+        assert response.status_code == 400
+        assert "Invalid redirect URI" in response.json()["detail"]
+
+    def test_invalid_redirect_uri_different_port(self):
+        """Test different port on same host is blocked."""
+        response = client.get(
+            "/api/v1/auth/login",
+            params={"provider": "google", "redirect_uri": "http://localhost:9999/callback"},
+        )
+        assert response.status_code == 400
+        assert "Invalid redirect URI" in response.json()["detail"]
+
+    def test_invalid_redirect_uri_javascript_scheme(self):
+        """Test javascript: scheme is blocked."""
+        response = client.get(
+            "/api/v1/auth/login",
+            params={"provider": "google", "redirect_uri": "javascript:alert(1)"},
+        )
+        assert response.status_code == 400
+        assert "Invalid redirect URI" in response.json()["detail"]
+
+    def test_invalid_redirect_uri_data_scheme(self):
+        """Test data: scheme is blocked."""
+        response = client.get(
+            "/api/v1/auth/login",
+            params={
+                "provider": "google",
+                "redirect_uri": "data:text/html,<script>alert(1)</script>",
+            },
+        )
+        assert response.status_code == 400
+        assert "Invalid redirect URI" in response.json()["detail"]
+
+    def test_invalid_redirect_uri_relative_path(self):
+        """Test relative path without host is blocked."""
+        response = client.get(
+            "/api/v1/auth/login",
+            params={"provider": "google", "redirect_uri": "/callback"},
+        )
+        assert response.status_code == 400
+        assert "Invalid redirect URI" in response.json()["detail"]
+
+    def test_callback_invalid_redirect_uri(self):
+        """Test callback endpoint also validates redirect URI."""
+        response = client.get(
+            "/api/v1/auth/callback",
+            params={
+                "code": "test_code",
+                "redirect_uri": "http://attacker.com/steal-token",
+            },
+        )
+        assert response.status_code == 400
+        assert "Invalid redirect URI" in response.json()["detail"]
+
+    def test_callback_host_suffix_attack(self):
+        """Test callback endpoint blocks host suffix attack."""
+        response = client.get(
+            "/api/v1/auth/callback",
+            params={
+                "code": "test_code",
+                "redirect_uri": "http://localhost:5173.attacker.com/callback",
+            },
+        )
+        assert response.status_code == 400
+        assert "Invalid redirect URI" in response.json()["detail"]

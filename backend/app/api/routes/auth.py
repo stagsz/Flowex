@@ -1,5 +1,5 @@
 from typing import Annotated
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -15,16 +15,53 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
 def _is_valid_redirect_uri(redirect_uri: str) -> bool:
-    """Validate redirect URI against allowed origins to prevent open redirect attacks."""
-    # Allow configured CORS origins
-    allowed_origins = settings.CORS_ORIGINS
+    """Validate redirect URI against allowed origins to prevent open redirect attacks.
 
-    # Check if redirect_uri starts with any allowed origin
-    for origin in allowed_origins:
-        if redirect_uri.startswith(origin):
-            return True
+    Uses strict URL parsing to prevent bypass attacks like:
+    - http://localhost:3000.attacker.com (host suffix attack)
+    - http://localhost:3000@attacker.com (userinfo attack)
+    - http://localhost:3000#@attacker.com (fragment attack)
+    """
+    try:
+        # Parse the redirect URI
+        redirect_parsed = urlparse(redirect_uri)
 
-    return False
+        # Reject URIs without scheme or netloc (malformed or relative URLs)
+        if not redirect_parsed.scheme or not redirect_parsed.netloc:
+            return False
+
+        # Only allow http/https schemes
+        if redirect_parsed.scheme not in ("http", "https"):
+            return False
+
+        # Build the redirect origin (scheme + host + optional port)
+        redirect_host = redirect_parsed.hostname
+        redirect_port = redirect_parsed.port
+        if redirect_port:
+            redirect_origin = f"{redirect_parsed.scheme}://{redirect_host}:{redirect_port}"
+        else:
+            redirect_origin = f"{redirect_parsed.scheme}://{redirect_host}"
+
+        # Check against allowed CORS origins with strict matching
+        for origin in settings.CORS_ORIGINS:
+            origin_parsed = urlparse(origin)
+            origin_host = origin_parsed.hostname
+            origin_port = origin_parsed.port
+
+            # Build origin string for comparison
+            if origin_port:
+                allowed_origin = f"{origin_parsed.scheme}://{origin_host}:{origin_port}"
+            else:
+                allowed_origin = f"{origin_parsed.scheme}://{origin_host}"
+
+            # Strict equality check on origin (scheme + host + port)
+            if redirect_origin.lower() == allowed_origin.lower():
+                return True
+
+        return False
+    except (ValueError, AttributeError):
+        # Malformed URL
+        return False
 
 
 class UserResponse(BaseModel):
