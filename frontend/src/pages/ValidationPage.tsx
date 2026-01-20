@@ -28,6 +28,8 @@ import {
   Square,
   CheckSquare,
   Flag,
+  Maximize2,
+  Minimize2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
@@ -142,10 +144,11 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
     { key: "Ctrl + S", action: "Show save status (auto-saved)" },
     { key: "+ / =", action: "Zoom in" },
     { key: "- / _", action: "Zoom out" },
+    { key: "G", action: "Toggle full-screen mode" },
     { key: "Tab", action: "Select next item" },
     { key: "Shift + Tab", action: "Select previous item" },
     { key: "Space", action: "Toggle checkbox selection" },
-    { key: "Escape", action: "Clear selection / Close help" },
+    { key: "Escape", action: "Exit full-screen / Clear selection" },
     { key: "?", action: "Show this help" },
   ]
 
@@ -236,6 +239,9 @@ export function ValidationPage() {
 
   // Keyboard shortcuts help
   const [showHelp, setShowHelp] = useState(false)
+
+  // Full-screen mode for PDF viewer
+  const [isFullScreen, setIsFullScreen] = useState(false)
 
   // Auto-save status tracking
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle")
@@ -955,11 +961,13 @@ export function ValidationPage() {
         return
       }
 
-      // Close help or clear selection
+      // Close help, exit full-screen, or clear selection
       if (e.key === "Escape") {
         e.preventDefault()
         if (showHelp) {
           setShowHelp(false)
+        } else if (isFullScreen) {
+          setIsFullScreen(false)
         } else if (selectedSymbolIds.size > 0) {
           clearSelection()
         } else {
@@ -1042,6 +1050,10 @@ export function ValidationPage() {
           e.preventDefault()
           setZoom(prev => Math.max(10, prev - 10))
           break
+        case "g":
+          e.preventDefault()
+          setIsFullScreen(prev => !prev)
+          break
         case "tab":
           e.preventDefault()
           if (e.shiftKey) {
@@ -1060,6 +1072,7 @@ export function ValidationPage() {
     selectedSymbolIds,
     filteredSymbols,
     showHelp,
+    isFullScreen,
     undo,
     redo,
     verifySymbol,
@@ -1109,11 +1122,17 @@ export function ValidationPage() {
   return (
     <div
       ref={containerRef}
-      className="h-[calc(100vh-8rem)] flex flex-col outline-none"
+      className={cn(
+        "flex flex-col outline-none",
+        isFullScreen ? "fixed inset-0 z-50 bg-background" : "h-[calc(100vh-8rem)]"
+      )}
       tabIndex={-1}
     >
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b">
+      <div className={cn(
+        "flex items-center justify-between pb-4 border-b",
+        isFullScreen && "px-4 pt-4"
+      )}>
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" asChild>
             <Link to={`/drawings/${drawingId}`}>
@@ -1179,7 +1198,10 @@ export function ValidationPage() {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex gap-4 pt-4 overflow-hidden">
+      <div className={cn(
+        "flex-1 flex gap-4 pt-4 overflow-hidden",
+        isFullScreen && "px-4 pb-4"
+      )}>
         {/* Left panel - Original PDF */}
         <div className="flex-1 flex flex-col border rounded-lg overflow-hidden">
           <div className="flex items-center justify-between p-2 border-b bg-muted/50">
@@ -1199,6 +1221,15 @@ export function ValidationPage() {
                 <RotateCw className="h-4 w-4" />
               </Button>
               <span className="text-xs text-muted-foreground w-8">{rotation}°</span>
+              <div className="w-px h-4 bg-border mx-1" />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsFullScreen(!isFullScreen)}
+                title={isFullScreen ? "Exit full-screen (Esc)" : "Full-screen (G)"}
+              >
+                {isFullScreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </Button>
             </div>
           </div>
           <div className="flex-1 overflow-auto bg-muted/20 p-4 flex items-center justify-center">
@@ -1267,8 +1298,11 @@ export function ValidationPage() {
           </div>
         </div>
 
-        {/* Right panel - Extracted data */}
-        <div className="w-96 flex flex-col border rounded-lg overflow-hidden">
+        {/* Right panel - Extracted data (hidden in full-screen mode) */}
+        <div className={cn(
+          "w-96 flex flex-col border rounded-lg overflow-hidden",
+          isFullScreen && "hidden"
+        )}>
           <div className="p-2 border-b bg-muted/50">
             <span className="text-sm font-medium">Extracted Components</span>
           </div>
