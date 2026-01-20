@@ -17,6 +17,7 @@ from torch.utils.data import DataLoader, random_split
 
 from dataset import PIDDataset, collate_fn, get_train_transforms, get_val_transforms
 from model import SymbolDetector
+from model_mobile import MobileSymbolDetector
 
 # Default to 50 ISO classes, but can be overridden for other datasets
 NUM_CLASSES = 50
@@ -89,30 +90,34 @@ def evaluate(
 
 
 def save_checkpoint(
-    model: SymbolDetector,
+    model: SymbolDetector | MobileSymbolDetector,
     optimizer: torch.optim.Optimizer,
     epoch: int,
     metrics: dict,
     path: str,
 ) -> None:
     """Save training checkpoint."""
-    torch.save({
+    checkpoint = {
         "epoch": epoch,
         "model_state_dict": model.model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
         "num_classes": model.num_classes,
         "confidence_threshold": model.confidence_threshold,
         "metrics": metrics,
-    }, path)
+    }
+    # Add backbone info for MobileSymbolDetector
+    if hasattr(model, "backbone_name"):
+        checkpoint["backbone_name"] = model.backbone_name
+    torch.save(checkpoint, path)
 
 
 def load_checkpoint(
     path: str,
-    model: SymbolDetector,
+    model: SymbolDetector | MobileSymbolDetector,
     optimizer: torch.optim.Optimizer | None = None,
 ) -> int:
     """Load checkpoint and return epoch number."""
-    checkpoint = torch.load(path, map_location="cpu")
+    checkpoint = torch.load(path, map_location="cpu", weights_only=False)
     model.model.load_state_dict(checkpoint["model_state_dict"])
     if optimizer and "optimizer_state_dict" in checkpoint:
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
@@ -141,6 +146,9 @@ def main():
                         help="Weight decay")
 
     # Model arguments
+    parser.add_argument("--backbone", type=str, default="resnet50",
+                        choices=["resnet50", "mobilenet_v3_small", "mobilenet_v3_large"],
+                        help="Backbone architecture (resnet50 ~160MB, mobilenet_v3_small ~35MB)")
     parser.add_argument("--pretrained", action="store_true", default=True,
                         help="Use pretrained backbone")
     parser.add_argument("--confidence-threshold", type=float, default=0.5,
@@ -153,6 +161,8 @@ def main():
                         help="Output directory for checkpoints")
     parser.add_argument("--resume", type=str, default=None,
                         help="Path to checkpoint to resume from")
+    parser.add_argument("--save-fp16", action="store_true",
+                        help="Save final model in FP16 format (smaller size)")
 
     # Other arguments
     parser.add_argument("--device", type=str, default=None,
@@ -226,12 +236,27 @@ def main():
 
     # Create model
     print(f"Creating model with {num_classes + 1} classes (including background)...")
-    model = SymbolDetector(
-        num_classes=num_classes + 1,  # +1 for background
-        pretrained=args.pretrained,
-        confidence_threshold=args.confidence_threshold,
-    )
+    print(f"Backbone: {args.backbone}")
+
+    if args.backbone == "resnet50":
+        model = SymbolDetector(
+            num_classes=num_classes + 1,  # +1 for background
+            pretrained=args.pretrained,
+            confidence_threshold=args.confidence_threshold,
+        )
+    else:
+        model = MobileSymbolDetector(
+            num_classes=num_classes + 1,  # +1 for background
+            backbone=args.backbone,
+            pretrained=args.pretrained,
+            confidence_threshold=args.confidence_threshold,
+        )
+
     model.to(device)
+
+    # Print model size estimate
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Model parameters: {total_params:,} ({total_params * 4 / 1024 / 1024:.1f} MB FP32, {total_params * 2 / 1024 / 1024:.1f} MB FP16)")
 
     # Create optimizer
     params = [p for p in model.parameters() if p.requires_grad]
@@ -311,6 +336,24 @@ def main():
     # Save final model
     final_path = output_dir / "final_model.pt"
     model.save(str(final_path))
+
+    # Save FP16 version if requested (for smaller deployment size)
+    if args.save_fp16:
+        fp16_path = output_dir / "symbol_detector.pt"
+        state_dict = model.model.state_dict()
+        fp16_state_dict = {k: v.half() if v.dtype == torch.float32 else v
+                          for k, v in state_dict.items()}
+        checkpoint = {
+            "model_state_dict": fp16_state_dict,
+            "num_classes": model.num_classes,
+            "confidence_threshold": model.confidence_threshold,
+            "dtype": "float16",
+        }
+        if hasattr(model, "backbone_name"):
+            checkpoint["backbone_name"] = model.backbone_name
+        torch.save(checkpoint, fp16_path)
+        fp16_size = fp16_path.stat().st_size / (1024 * 1024)
+        print(f"Saved FP16 model to {fp16_path} ({fp16_size:.1f} MB)")
 
     # Save training history
     history_path = output_dir / "training_history.json"

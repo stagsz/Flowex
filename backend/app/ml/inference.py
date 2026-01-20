@@ -89,17 +89,37 @@ class InferenceService:
             return ["__background__"] + [f"class_{i}" for i in range(50)]
 
     def _load_model(self, path: str) -> None:
-        """Load the symbol detection model."""
+        """Load the symbol detection model (supports both ResNet and MobileNet backbones)."""
         try:
             # Dynamic import from ml training module (path set at runtime)
             import sys
-            sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "ml" / "training"))
-            from model import SymbolDetector  # type: ignore[import-not-found]
+            ml_path = str(Path(__file__).parent.parent.parent.parent / "ml" / "training")
+            if ml_path not in sys.path:
+                sys.path.insert(0, ml_path)
 
-            self.symbol_model = SymbolDetector.load(path, device=self.device)
+            # Load checkpoint to detect model type
+            checkpoint = torch.load(path, map_location=self.device, weights_only=False)
+
+            # Check if it's a MobileNet model
+            if "backbone_name" in checkpoint and "mobilenet" in checkpoint.get("backbone_name", ""):
+                from model_mobile import MobileSymbolDetector  # type: ignore[import-not-found]
+                self.symbol_model = MobileSymbolDetector.load(path, device=self.device)
+                logger.info(f"Loaded MobileNet model from {path}")
+            else:
+                from model import SymbolDetector  # type: ignore[import-not-found]
+                self.symbol_model = SymbolDetector.load(path, device=self.device)
+                logger.info(f"Loaded ResNet model from {path}")
+
+            # Handle FP16 models - convert to FP32 for inference
+            if checkpoint.get("dtype") == "float16":
+                logger.info("Converting FP16 model to FP32 for inference")
+                state_dict = checkpoint["model_state_dict"]
+                fp32_state_dict = {k: v.float() if v.dtype == torch.float16 else v
+                                   for k, v in state_dict.items()}
+                self.symbol_model.model.load_state_dict(fp32_state_dict)
+
             self.symbol_model.to(self.device)  # type: ignore[attr-defined]
             self.symbol_model.eval()  # type: ignore[attr-defined]
-            logger.info(f"Loaded model from {path}")
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
             self.symbol_model = None
