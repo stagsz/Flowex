@@ -1805,6 +1805,8 @@ export function ValidationPage() {
     showToast,
     lastSavedAt,
     formatLastSaved,
+    isAddSymbolMode,
+    showAddSymbolDialog,
   ])
 
   // Focus container for keyboard events
@@ -1814,12 +1816,14 @@ export function ValidationPage() {
 
   // Cleanup timeouts on unmount
   useEffect(() => {
+    const saveTimeout = saveTimeoutRef.current
+    const autoSaveInterval = autoSaveIntervalRef.current
     return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current)
+      if (saveTimeout) {
+        clearTimeout(saveTimeout)
       }
-      if (autoSaveIntervalRef.current) {
-        clearInterval(autoSaveIntervalRef.current)
+      if (autoSaveInterval) {
+        clearInterval(autoSaveInterval)
       }
     }
   }, [])
