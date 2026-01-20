@@ -20,25 +20,28 @@ export default defineConfig({
     build: {
         rollupOptions: {
             output: {
-                manualChunks: {
+                manualChunks: function (id) {
                     // Core React vendor chunk
-                    'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-                    // UI library chunk
-                    'vendor-ui': [
-                        '@radix-ui/react-dialog',
-                        '@radix-ui/react-dropdown-menu',
-                        '@radix-ui/react-select',
-                        '@radix-ui/react-tabs',
-                        '@radix-ui/react-tooltip',
-                        '@radix-ui/react-progress',
-                        '@radix-ui/react-checkbox',
-                        '@radix-ui/react-label',
-                        '@radix-ui/react-slot',
-                    ],
+                    if (id.includes('node_modules/react/') ||
+                        id.includes('node_modules/react-dom/') ||
+                        id.includes('node_modules/react-router')) {
+                        return 'vendor-react';
+                    }
+                    // Radix UI components chunk
+                    if (id.includes('node_modules/@radix-ui/')) {
+                        return 'vendor-ui';
+                    }
                     // State management and utilities
-                    'vendor-utils': ['zustand', 'clsx', 'tailwind-merge', 'class-variance-authority'],
+                    if (id.includes('node_modules/zustand/') ||
+                        id.includes('node_modules/clsx/') ||
+                        id.includes('node_modules/tailwind-merge/') ||
+                        id.includes('node_modules/class-variance-authority/')) {
+                        return 'vendor-utils';
+                    }
                     // Monitoring/analytics
-                    'vendor-monitoring': ['@sentry/react'],
+                    if (id.includes('node_modules/@sentry/')) {
+                        return 'vendor-monitoring';
+                    }
                 },
             },
         },

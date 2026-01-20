@@ -78,19 +78,19 @@ def download_model_from_supabase(
             logger.error("SUPABASE_SERVICE_ROLE_KEY not set, cannot download private model")
             return False
 
-        client = create_client(
+        supabase_client = create_client(
             settings.SUPABASE_URL,
             settings.SUPABASE_SERVICE_ROLE_KEY
         )
 
-        response = client.storage.from_(bucket).download(remote_path)
+        file_bytes: bytes = supabase_client.storage.from_(bucket).download(remote_path)
 
         local_dir = os.path.dirname(local_path)
         if local_dir:
             os.makedirs(local_dir, exist_ok=True)
 
         with open(local_path, "wb") as f:
-            f.write(response)
+            f.write(file_bytes)
 
         size_mb = os.path.getsize(local_path) / (1024 * 1024)
         logger.info(f"Model downloaded via SDK: {local_path} ({size_mb:.1f} MB)")
