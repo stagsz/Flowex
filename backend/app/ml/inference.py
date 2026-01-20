@@ -111,7 +111,7 @@ class InferenceService:
                 logger.info(f"Loaded ResNet model from {path}")
 
             # Handle FP16 models - convert to FP32 for inference
-            if checkpoint.get("dtype") == "float16":
+            if checkpoint.get("dtype") == "float16" and self.symbol_model is not None:
                 logger.info("Converting FP16 model to FP32 for inference")
                 state_dict = checkpoint["model_state_dict"]
                 fp32_state_dict = {k: v.float() if v.dtype == torch.float16 else v

@@ -621,3 +621,61 @@ async def verify_symbol(
         confidence=symbol.confidence,
         is_verified=symbol.is_verified,
     )
+
+
+class BulkVerifyRequest(BaseModel):
+    symbol_ids: list[str]
+
+
+class BulkVerifyResponse(BaseModel):
+    verified_count: int
+    verified_ids: list[str]
+    failed_ids: list[str]
+
+
+@router.post("/{drawing_id}/symbols/bulk-verify", response_model=BulkVerifyResponse)
+async def bulk_verify_symbols(
+    drawing_id: UUID,
+    request: BulkVerifyRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> BulkVerifyResponse:
+    """Mark multiple symbols as verified in a single operation."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    verified_ids: list[str] = []
+    failed_ids: list[str] = []
+
+    for symbol_id_str in request.symbol_ids:
+        try:
+            symbol_id = UUID(symbol_id_str)
+            symbol = db.query(Symbol).filter(
+                Symbol.id == symbol_id,
+                Symbol.drawing_id == drawing_id,
+            ).first()
+            if symbol and not symbol.is_verified:
+                symbol.is_verified = True
+                verified_ids.append(symbol_id_str)
+            elif symbol and symbol.is_verified:
+                # Already verified, still count as success
+                verified_ids.append(symbol_id_str)
+            else:
+                failed_ids.append(symbol_id_str)
+        except (ValueError, TypeError):
+            # Invalid UUID format
+            failed_ids.append(symbol_id_str)
+
+    db.commit()
+
+    return BulkVerifyResponse(
+        verified_count=len(verified_ids),
+        verified_ids=verified_ids,
+        failed_ids=failed_ids,
+    )

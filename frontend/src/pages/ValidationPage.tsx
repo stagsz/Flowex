@@ -6,6 +6,7 @@ import "react-pdf/dist/Page/TextLayer.css"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   ArrowLeft,
   ZoomIn,
@@ -16,6 +17,7 @@ import {
   Redo,
   Search,
   CheckCircle,
+  CheckCircle2,
   AlertTriangle,
   Filter,
   Loader2,
@@ -23,6 +25,8 @@ import {
   Cloud,
   CloudOff,
   Check,
+  Square,
+  CheckSquare,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
@@ -32,10 +36,13 @@ type SaveStatus = "idle" | "saving" | "saved" | "error"
 
 // Undo/Redo action types
 interface EditAction {
-  type: "verify" | "delete" | "update_tag"
+  type: "verify" | "delete" | "update_tag" | "bulk_verify"
   symbolId: string
   previousState: DetectedSymbol | null
   newState: DetectedSymbol | null
+  // For bulk operations
+  symbolIds?: string[]
+  previousStates?: DetectedSymbol[]
 }
 
 // Set up PDF.js worker
@@ -123,7 +130,8 @@ function SaveStatusIndicator({
 // Keyboard shortcuts help dialog
 function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
   const shortcuts = [
-    { key: "V", action: "Verify selected item" },
+    { key: "V", action: "Verify selected item(s)" },
+    { key: "Ctrl + A", action: "Select all items" },
     { key: "Delete / Backspace", action: "Delete selected item" },
     { key: "Ctrl + Z", action: "Undo last action" },
     { key: "Ctrl + Y", action: "Redo last action" },
@@ -132,7 +140,8 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
     { key: "- / _", action: "Zoom out" },
     { key: "Tab", action: "Select next item" },
     { key: "Shift + Tab", action: "Select previous item" },
-    { key: "Escape", action: "Deselect / Close help" },
+    { key: "Space", action: "Toggle checkbox selection" },
+    { key: "Escape", action: "Clear selection / Close help" },
     { key: "?", action: "Show this help" },
   ]
 
@@ -164,6 +173,7 @@ export function ValidationPage() {
   const [zoom, setZoom] = useState(50) // Start smaller for large P&ID drawings
   const [rotation, setRotation] = useState(0) // Default 0° - P&IDs are typically A1/A3 landscape
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
+  const [selectedSymbolIds, setSelectedSymbolIds] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState("")
   const [filterType, setFilterType] = useState("all")
   const [showLowConfidence] = useState(true)
@@ -388,6 +398,109 @@ export function ValidationPage() {
     }
   }, [drawingId, symbols, pushToUndoStack, showToast, markSaving, markSaved, markSaveError])
 
+  // Bulk verify multiple symbols
+  const bulkVerifySymbols = useCallback(async (symbolIds: string[]) => {
+    // Filter to only unverified symbols
+    const unverifiedIds = symbolIds.filter(id => {
+      const symbol = symbols.find(s => s.id === id)
+      return symbol && !symbol.validated
+    })
+
+    if (unverifiedIds.length === 0) {
+      showToast("All selected items are already verified")
+      return
+    }
+
+    markSaving()
+    try {
+      const response = await api.post(
+        `/api/v1/drawings/${drawingId}/symbols/bulk-verify`,
+        { symbol_ids: unverifiedIds }
+      )
+      if (response.ok) {
+        const data = await response.json()
+
+        // Store previous states for undo
+        const previousStates = unverifiedIds
+          .map(id => symbols.find(s => s.id === id))
+          .filter((s): s is DetectedSymbol => s !== undefined)
+
+        // Push bulk action to undo stack
+        pushToUndoStack({
+          type: "bulk_verify",
+          symbolId: "", // Not used for bulk
+          previousState: null,
+          newState: null,
+          symbolIds: data.verified_ids,
+          previousStates,
+        })
+
+        // Update local state
+        setSymbols(prev =>
+          prev.map(s => data.verified_ids.includes(s.id) ? { ...s, validated: true } : s)
+        )
+
+        markSaved()
+        showToast(`Verified ${data.verified_count} item${data.verified_count !== 1 ? 's' : ''}`)
+
+        // Clear selection after bulk verify
+        setSelectedSymbolIds(new Set())
+      } else {
+        markSaveError()
+        showToast("Failed to verify symbols")
+      }
+    } catch (err) {
+      console.error("Failed to bulk verify symbols:", err)
+      markSaveError()
+      showToast("Failed to verify symbols")
+    }
+  }, [drawingId, symbols, pushToUndoStack, showToast, markSaving, markSaved, markSaveError])
+
+  // Bulk unverify symbols (for undo)
+  const bulkUnverifySymbols = useCallback(async (symbolIds: string[]) => {
+    markSaving()
+    try {
+      // Unverify each symbol via PATCH
+      for (const symbolId of symbolIds) {
+        await api.patch(
+          `/api/v1/drawings/${drawingId}/symbols/${symbolId}`,
+          { is_verified: false }
+        )
+      }
+      setSymbols(prev =>
+        prev.map(s => symbolIds.includes(s.id) ? { ...s, validated: false } : s)
+      )
+      markSaved()
+    } catch (err) {
+      console.error("Failed to unverify symbols:", err)
+      markSaveError()
+    }
+  }, [drawingId, markSaving, markSaved, markSaveError])
+
+  // Toggle selection of a symbol (for checkbox click)
+  const toggleSymbolSelection = useCallback((symbolId: string) => {
+    setSelectedSymbolIds(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(symbolId)) {
+        newSet.delete(symbolId)
+      } else {
+        newSet.add(symbolId)
+      }
+      return newSet
+    })
+  }, [])
+
+  // Select all filtered symbols - takes the current list as parameter
+  const selectAllSymbols = useCallback((symbolList: DetectedSymbol[]) => {
+    setSelectedSymbolIds(new Set(symbolList.map(s => s.id)))
+  }, [])
+
+  // Clear selection
+  const clearSelection = useCallback(() => {
+    setSelectedSymbolIds(new Set())
+    setSelectedSymbol(null)
+  }, [])
+
   // Unverify a symbol (for undo)
   const unverifySymbol = useCallback(async (symbolId: string) => {
     markSaving()
@@ -536,6 +649,12 @@ export function ValidationPage() {
           showToast("Undone: verification")
         }
         break
+      case "bulk_verify":
+        if (action.symbolIds && action.symbolIds.length > 0) {
+          await bulkUnverifySymbols(action.symbolIds)
+          showToast(`Undone: bulk verification (${action.symbolIds.length} items)`)
+        }
+        break
       case "delete":
         if (action.previousState) {
           await restoreSymbol(action.previousState)
@@ -552,7 +671,7 @@ export function ValidationPage() {
 
     // Push to redo stack
     setRedoStack(prev => [...prev, action])
-  }, [undoStack, unverifySymbol, restoreSymbol, updateSymbolTag, showToast])
+  }, [undoStack, unverifySymbol, bulkUnverifySymbols, restoreSymbol, updateSymbolTag, showToast])
 
   // Redo last undone action
   const redo = useCallback(async () => {
@@ -569,6 +688,19 @@ export function ValidationPage() {
         await verifySymbol(action.symbolId, true)
         showToast("Redone: verification")
         break
+      case "bulk_verify":
+        if (action.symbolIds && action.symbolIds.length > 0) {
+          // Re-verify all symbols in the bulk action
+          await api.post(
+            `/api/v1/drawings/${drawingId}/symbols/bulk-verify`,
+            { symbol_ids: action.symbolIds }
+          )
+          setSymbols(prev =>
+            prev.map(s => action.symbolIds?.includes(s.id) ? { ...s, validated: true } : s)
+          )
+          showToast(`Redone: bulk verification (${action.symbolIds.length} items)`)
+        }
+        break
       case "delete":
         await deleteSymbol(action.symbolId, true)
         showToast("Redone: delete")
@@ -583,7 +715,7 @@ export function ValidationPage() {
 
     // Push back to undo stack
     setUndoStack(prev => [...prev, action])
-  }, [redoStack, verifySymbol, deleteSymbol, updateSymbolTag, showToast])
+  }, [drawingId, redoStack, verifySymbol, deleteSymbol, updateSymbolTag, showToast])
 
   const filteredSymbols = symbols.filter((symbol) => {
     const matchesSearch = symbol.tag.toLowerCase().includes(searchQuery.toLowerCase())
@@ -651,11 +783,13 @@ export function ValidationPage() {
         return
       }
 
-      // Close help or deselect
+      // Close help or clear selection
       if (e.key === "Escape") {
         e.preventDefault()
         if (showHelp) {
           setShowHelp(false)
+        } else if (selectedSymbolIds.size > 0) {
+          clearSelection()
         } else {
           setSelectedSymbol(null)
         }
@@ -673,6 +807,11 @@ export function ValidationPage() {
             e.preventDefault()
             redo()
             return
+          case "a":
+            e.preventDefault()
+            selectAllSymbols(filteredSymbols)
+            showToast(`Selected ${filteredSymbols.length} item${filteredSymbols.length !== 1 ? 's' : ''}`)
+            return
           case "s":
             e.preventDefault()
             // Changes are auto-saved, just show the status
@@ -688,9 +827,20 @@ export function ValidationPage() {
       // Single key shortcuts (when not in input)
       switch (e.key.toLowerCase()) {
         case "v":
+          e.preventDefault()
+          // If multiple items are selected (checkbox selection), bulk verify
+          if (selectedSymbolIds.size > 0) {
+            bulkVerifySymbols(Array.from(selectedSymbolIds))
+          } else if (selectedSymbol) {
+            // Otherwise verify single selected item
+            verifySymbol(selectedSymbol)
+          }
+          break
+        case " ":
+          // Space toggles checkbox selection of focused item
           if (selectedSymbol) {
             e.preventDefault()
-            verifySymbol(selectedSymbol)
+            toggleSymbolSelection(selectedSymbol)
           }
           break
         case "delete":
@@ -725,13 +875,19 @@ export function ValidationPage() {
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [
     selectedSymbol,
+    selectedSymbolIds,
+    filteredSymbols,
     showHelp,
     undo,
     redo,
     verifySymbol,
+    bulkVerifySymbols,
     deleteSymbol,
     selectNextSymbol,
     selectPrevSymbol,
+    selectAllSymbols,
+    clearSelection,
+    toggleSymbolSelection,
     showToast,
     lastSavedAt,
     formatLastSaved,
@@ -977,6 +1133,60 @@ export function ValidationPage() {
             </div>
           </div>
 
+          {/* Bulk action bar */}
+          <div className="p-2 border-b bg-muted/30 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="select-all"
+                checked={
+                  filteredSymbols.length > 0 &&
+                  filteredSymbols.every(s => selectedSymbolIds.has(s.id))
+                }
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    selectAllSymbols(filteredSymbols)
+                  } else {
+                    clearSelection()
+                  }
+                }}
+              />
+              <label
+                htmlFor="select-all"
+                className="text-xs text-muted-foreground cursor-pointer select-none"
+              >
+                {selectedSymbolIds.size > 0
+                  ? `${selectedSymbolIds.size} selected`
+                  : "Select all"}
+              </label>
+            </div>
+            {selectedSymbolIds.size > 0 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={clearSelection}
+                >
+                  Clear
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => bulkVerifySymbols(Array.from(selectedSymbolIds))}
+                  disabled={
+                    Array.from(selectedSymbolIds).every(id => {
+                      const s = symbols.find(sym => sym.id === id)
+                      return s?.validated
+                    })
+                  }
+                >
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  Verify All ({selectedSymbolIds.size})
+                </Button>
+              </div>
+            )}
+          </div>
+
           {/* Symbol list */}
           <div className="flex-1 overflow-auto">
             {symbolsLoading ? (
@@ -1003,11 +1213,19 @@ export function ValidationPage() {
                   "p-3 border-b cursor-pointer transition-colors",
                   selectedSymbol === symbol.id
                     ? "bg-primary/5 border-l-2 border-l-primary"
+                    : selectedSymbolIds.has(symbol.id)
+                    ? "bg-primary/10"
                     : "hover:bg-muted/50"
                 )}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={selectedSymbolIds.has(symbol.id)}
+                      onCheckedChange={() => toggleSymbolSelection(symbol.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-4 w-4"
+                    />
                     <div className={cn("w-2 h-2 rounded-full", typeColors[symbol.type])} />
                     <span className="font-medium">{symbol.tag}</span>
                   </div>
@@ -1031,7 +1249,7 @@ export function ValidationPage() {
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground ml-6">
                   <span className="capitalize">{symbol.type}</span>
                   <span>({symbol.x}, {symbol.y})</span>
                 </div>

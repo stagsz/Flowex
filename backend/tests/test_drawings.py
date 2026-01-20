@@ -1,10 +1,18 @@
-import pytest
+from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
+import pytest
+from fastapi.testclient import TestClient
+
+from app.api.routes.drawings import BulkVerifyRequest, BulkVerifyResponse
+from app.main import app
 from app.services.drawings import (
     MAX_FILE_SIZE,
     FileValidationError,
     validate_file,
 )
+
+client = TestClient(app)
 
 
 class TestFileValidation:
@@ -87,3 +95,90 @@ class TestStoragePathGeneration:
         parts = path.split("/")
         assert parts[0] == "organizations"
         assert len(parts) >= 5  # organizations, org_id, year, month, day, filename
+
+
+class TestBulkVerifyRequest:
+    """Tests for BulkVerifyRequest model."""
+
+    def test_valid_request_single_id(self):
+        """Test valid request with single symbol ID."""
+        request = BulkVerifyRequest(symbol_ids=["abc-123"])
+        assert request.symbol_ids == ["abc-123"]
+
+    def test_valid_request_multiple_ids(self):
+        """Test valid request with multiple symbol IDs."""
+        ids = [str(uuid4()) for _ in range(5)]
+        request = BulkVerifyRequest(symbol_ids=ids)
+        assert len(request.symbol_ids) == 5
+
+    def test_empty_list_allowed(self):
+        """Test that empty list is technically valid (will return 0 verified)."""
+        request = BulkVerifyRequest(symbol_ids=[])
+        assert request.symbol_ids == []
+
+
+class TestBulkVerifyResponse:
+    """Tests for BulkVerifyResponse model."""
+
+    def test_response_structure(self):
+        """Test response has correct structure."""
+        response = BulkVerifyResponse(
+            verified_count=3,
+            verified_ids=["a", "b", "c"],
+            failed_ids=["d"],
+        )
+        assert response.verified_count == 3
+        assert len(response.verified_ids) == 3
+        assert len(response.failed_ids) == 1
+
+    def test_response_all_verified(self):
+        """Test response when all symbols are verified."""
+        ids = ["a", "b", "c"]
+        response = BulkVerifyResponse(
+            verified_count=3,
+            verified_ids=ids,
+            failed_ids=[],
+        )
+        assert response.failed_ids == []
+
+
+class TestBulkVerifyEndpoint:
+    """Tests for bulk verify endpoint authentication and access control."""
+
+    def test_bulk_verify_requires_auth(self):
+        """Test bulk verify endpoint requires authentication."""
+        drawing_id = str(uuid4())
+        response = client.post(
+            f"/api/v1/drawings/{drawing_id}/symbols/bulk-verify",
+            json={"symbol_ids": [str(uuid4())]},
+        )
+        # Should return 403 (Forbidden) without auth
+        assert response.status_code == 403
+
+    def test_bulk_verify_invalid_drawing_id_requires_auth(self):
+        """Test bulk verify with invalid drawing ID requires auth first."""
+        response = client.post(
+            "/api/v1/drawings/invalid-uuid/symbols/bulk-verify",
+            json={"symbol_ids": [str(uuid4())]},
+        )
+        # Auth check happens before validation, so returns 403
+        assert response.status_code == 403
+
+    def test_bulk_verify_missing_body_requires_auth(self):
+        """Test bulk verify with missing request body requires auth first."""
+        drawing_id = str(uuid4())
+        response = client.post(
+            f"/api/v1/drawings/{drawing_id}/symbols/bulk-verify",
+        )
+        # Auth check happens before body validation, so returns 403
+        assert response.status_code == 403
+
+    def test_bulk_verify_empty_symbol_ids(self):
+        """Test bulk verify with empty symbol_ids array requires auth."""
+        drawing_id = str(uuid4())
+        response = client.post(
+            f"/api/v1/drawings/{drawing_id}/symbols/bulk-verify",
+            json={"symbol_ids": []},
+        )
+        # Should return 403 (Forbidden) without auth
+        assert response.status_code == 403
