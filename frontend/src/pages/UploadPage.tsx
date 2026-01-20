@@ -216,6 +216,33 @@ export function UploadPage() {
               </option>
             ))}
           </select>
+
+          {!showCreateProject ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={() => setShowCreateProject(true)}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Create New Project
+            </Button>
+          ) : (
+            <div className="mt-3 flex gap-2">
+              <Input
+                placeholder="Project name"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && createProject()}
+              />
+              <Button onClick={createProject} disabled={isCreatingProject || !newProjectName.trim()}>
+                {isCreatingProject ? "Creating..." : "Create"}
+              </Button>
+              <Button variant="ghost" onClick={() => setShowCreateProject(false)}>
+                Cancel
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
