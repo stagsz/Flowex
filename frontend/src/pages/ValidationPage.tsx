@@ -202,7 +202,7 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
 }
 
 // Export types
-type ExportType = "dxf" | "lists"
+type ExportType = "dxf" | "lists" | "checklist"
 type ExportStatus = "idle" | "configuring" | "exporting" | "completed" | "error"
 
 interface ExportJob {
@@ -241,6 +241,10 @@ function ExportDialog({
   const [listsFormat, setListsFormat] = useState<"xlsx" | "csv" | "pdf">("xlsx")
   const [selectedLists, setSelectedLists] = useState<string[]>(["equipment", "line", "instrument", "valve", "mto"])
   const [includeUnverified, setIncludeUnverified] = useState(false)
+
+  // Validation checklist export options
+  const [checklistFormat, setChecklistFormat] = useState<"pdf" | "xlsx" | "csv">("pdf")
+  const [checklistIncludeUnverified, setChecklistIncludeUnverified] = useState(true)
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -289,6 +293,11 @@ function ExportDialog({
           include_annotations: includeAnnotations,
           include_title_block: includeTitleBlock,
         })
+      } else if (exportType === "checklist") {
+        response = await api.post(`/api/v1/exports/drawings/${drawingId}/checklist`, {
+          format: checklistFormat,
+          include_unverified: checklistIncludeUnverified,
+        })
       } else {
         response = await api.post(`/api/v1/exports/drawings/${drawingId}/lists`, {
           lists: selectedLists,
@@ -329,6 +338,8 @@ function ExportDialog({
     selectedLists,
     listsFormat,
     includeUnverified,
+    checklistFormat,
+    checklistIncludeUnverified,
     pollJobStatus,
   ])
 
@@ -345,11 +356,20 @@ function ExportDialog({
         a.href = url
 
         // Determine filename based on export type
-        let extension = exportType === "dxf" ? dxfFormat : listsFormat
-        if (exportType === "lists" && selectedLists.length > 1) {
-          extension = "zip" // Multiple lists are zipped
+        let extension: string
+        let suffix: string = "_export"
+        if (exportType === "dxf") {
+          extension = dxfFormat
+        } else if (exportType === "checklist") {
+          extension = checklistFormat
+          suffix = "_validation_checklist"
+        } else {
+          extension = listsFormat
+          if (selectedLists.length > 1) {
+            extension = "zip" // Multiple lists are zipped
+          }
         }
-        a.download = `${drawingName.replace(/\.[^/.]+$/, "")}_export.${extension}`
+        a.download = `${drawingName.replace(/\.[^/.]+$/, "")}${suffix}.${extension}`
 
         document.body.appendChild(a)
         a.click()
@@ -364,7 +384,7 @@ function ExportDialog({
     } catch {
       showToast("Failed to download export")
     }
-  }, [exportJob, exportType, dxfFormat, listsFormat, selectedLists, drawingName, showToast, onClose])
+  }, [exportJob, exportType, dxfFormat, listsFormat, checklistFormat, selectedLists, drawingName, showToast, onClose])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -405,7 +425,7 @@ function ExportDialog({
           <>
             <div className="mb-6">
               <label className="text-sm font-medium mb-2 block">Export Type</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <Button
                   variant={exportType === "dxf" ? "default" : "outline"}
                   className="flex items-center justify-center gap-2 h-16"
@@ -426,6 +446,17 @@ function ExportDialog({
                   <div className="text-left">
                     <div className="font-medium">Data Lists</div>
                     <div className="text-xs opacity-70">Excel/CSV/PDF</div>
+                  </div>
+                </Button>
+                <Button
+                  variant={exportType === "checklist" ? "default" : "outline"}
+                  className="flex items-center justify-center gap-2 h-16"
+                  onClick={() => setExportType("checklist")}
+                >
+                  <ClipboardCheck className="h-5 w-5" />
+                  <div className="text-left">
+                    <div className="font-medium">Checklist</div>
+                    <div className="text-xs opacity-70">Validation PDF</div>
                   </div>
                 </Button>
               </div>
@@ -570,6 +601,43 @@ function ExportDialog({
               </div>
             )}
 
+            {/* Validation Checklist Export Options */}
+            {exportType === "checklist" && (
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Format</label>
+                  <Select value={checklistFormat} onValueChange={(v: "pdf" | "xlsx" | "csv") => setChecklistFormat(v)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pdf">PDF (Printable)</SelectItem>
+                      <SelectItem value="xlsx">Excel (.xlsx)</SelectItem>
+                      <SelectItem value="csv">CSV (.csv)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="rounded-md border p-3 bg-muted/50">
+                  <p className="text-sm text-muted-foreground">
+                    The validation checklist exports all extracted items grouped by category,
+                    showing their verification status. Perfect for auditing and sign-off.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="checklistIncludeUnverified"
+                    checked={checklistIncludeUnverified}
+                    onCheckedChange={(c) => setChecklistIncludeUnverified(!!c)}
+                  />
+                  <label htmlFor="checklistIncludeUnverified" className="text-sm cursor-pointer">
+                    Include all items (verified and unverified)
+                  </label>
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={onClose}>
                 Cancel
@@ -607,7 +675,7 @@ function ExportDialog({
             <CheckCircle className="h-10 w-10 mx-auto mb-4 text-green-500" />
             <p className="font-medium">Export ready!</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Your {exportType === "dxf" ? "AutoCAD" : "data lists"} export is ready for download.
+              Your {exportType === "dxf" ? "AutoCAD" : exportType === "checklist" ? "validation checklist" : "data lists"} export is ready for download.
             </p>
             <div className="flex justify-center gap-2 mt-6">
               <Button variant="outline" onClick={onClose}>
