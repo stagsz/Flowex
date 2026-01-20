@@ -307,7 +307,7 @@ class MicrosoftGraphProvider(CloudStorageProvider):
         filename: str,
         content: bytes,
         mime_type: str,
-    ) -> dict:
+    ) -> dict[str, object]:
         """Upload large file using upload session."""
         drive_path = self._get_drive_path()
         create_session_url = (
@@ -352,7 +352,8 @@ class MicrosoftGraphProvider(CloudStorageProvider):
 
                 # Last chunk returns the completed item
                 if end == total_size:
-                    return response.json()
+                    result: dict[str, object] = response.json()
+                    return result
 
         raise RuntimeError("Upload failed to return completed item")
 
@@ -406,7 +407,7 @@ class MicrosoftGraphProvider(CloudStorageProvider):
             )
             return response.status_code == 200
 
-    async def get_sharepoint_sites(self, access_token: str) -> list[dict]:
+    async def get_sharepoint_sites(self, access_token: str) -> list[dict[str, str]]:
         """Get available SharePoint sites for the user."""
         endpoint = f"{self.GRAPH_BASE_URL}/sites?search=*"
 
@@ -429,7 +430,7 @@ class MicrosoftGraphProvider(CloudStorageProvider):
                 )
             return sites
 
-    async def get_site_drives(self, access_token: str, site_id: str) -> list[dict]:
+    async def get_site_drives(self, access_token: str, site_id: str) -> list[dict[str, str]]:
         """Get drives (document libraries) in a SharePoint site."""
         endpoint = f"{self.GRAPH_BASE_URL}/sites/{site_id}/drives"
 

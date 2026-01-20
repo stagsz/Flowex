@@ -78,10 +78,10 @@ class InferenceService:
     def _load_class_names(self) -> list[str]:
         """Load class names from symbol classes definition."""
         try:
-            # Import from ml training module
+            # Import from ml training module (dynamic import, path set at runtime)
             import sys
             sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "ml" / "training"))
-            from symbol_classes import get_class_names
+            from symbol_classes import get_class_names  # type: ignore[import-not-found]
             class_names: list[str] = get_class_names()
             return ["__background__"] + class_names
         except ImportError:
@@ -91,9 +91,10 @@ class InferenceService:
     def _load_model(self, path: str) -> None:
         """Load the symbol detection model."""
         try:
+            # Dynamic import from ml training module (path set at runtime)
             import sys
             sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "ml" / "training"))
-            from model import SymbolDetector
+            from model import SymbolDetector  # type: ignore[import-not-found]
 
             self.symbol_model = SymbolDetector.load(path, device=self.device)
             self.symbol_model.to(self.device)  # type: ignore[attr-defined]

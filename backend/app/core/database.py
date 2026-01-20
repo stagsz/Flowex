@@ -7,9 +7,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import settings
 
 
-def _get_engine_kwargs() -> dict:
+def _get_engine_kwargs() -> dict[str, int | bool]:
     """Get engine configuration based on database type."""
-    kwargs = {
+    kwargs: dict[str, int | bool] = {
         "pool_pre_ping": True,
         "pool_size": 10,
         "max_overflow": 20,

@@ -24,7 +24,7 @@ class CloudStorageService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
-        self._state_cache: dict[str, dict] = {}
+        self._state_cache: dict[str, dict[str, object]] = {}
 
     def _get_provider(self, connection: CloudConnection) -> CloudStorageProvider:
         """Get the appropriate provider for a connection."""
@@ -65,7 +65,7 @@ class CloudStorageService:
         }
         return state
 
-    def validate_oauth_state(self, state: str) -> dict | None:
+    def validate_oauth_state(self, state: str) -> dict[str, object] | None:
         """Validate and consume OAuth state."""
         if state not in self._state_cache:
             return None
@@ -74,7 +74,7 @@ class CloudStorageService:
 
         # Check if state is expired (5 minutes)
         created_at = state_data["created_at"]
-        if datetime.now(UTC) - created_at > timedelta(minutes=5):
+        if isinstance(created_at, datetime) and datetime.now(UTC) - created_at > timedelta(minutes=5):
             return None
 
         return state_data
@@ -325,7 +325,7 @@ class CloudStorageService:
         self,
         connection_id: uuid.UUID,
         user_id: uuid.UUID,
-    ) -> list[dict]:
+    ) -> list[dict[str, str]]:
         """Get SharePoint sites (Microsoft only)."""
         connection = await self.get_connection(connection_id, user_id)
         if not connection:
@@ -344,7 +344,7 @@ class CloudStorageService:
         connection_id: uuid.UUID,
         user_id: uuid.UUID,
         site_id: str,
-    ) -> list[dict]:
+    ) -> list[dict[str, str]]:
         """Get drives in a SharePoint site."""
         connection = await self.get_connection(connection_id, user_id)
         if not connection:

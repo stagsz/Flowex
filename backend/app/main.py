@@ -61,7 +61,7 @@ app = FastAPI(
 
 # Global exception handler to ensure CORS headers on errors
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle all uncaught exceptions and ensure CORS headers are present."""
     # Log the full error
     logger.error(f"Unhandled exception: {exc}\n{traceback.format_exc()}")

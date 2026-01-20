@@ -192,11 +192,12 @@ class SupabaseStorageService(BaseStorageService):
             )
         except TypeError:
             # Fallback for older/newer versions with different signatures
+            # ClientOptions is aliased differently in some versions
             options = ClientOptions()
             self.client = Client(
                 settings.SUPABASE_URL,
                 settings.SUPABASE_SERVICE_ROLE_KEY,
-                options=options,
+                options=options,  # type: ignore[arg-type]
             )
         self.bucket = settings.SUPABASE_STORAGE_BUCKET
         self._ensure_bucket_exists()

@@ -24,7 +24,20 @@ disallow_untyped_defs = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["celery.*", "redis.*", "boto3.*", "pdf2image.*", "fitz.*"]
+module = [
+    "celery.*",
+    "redis.*",
+    "boto3.*",
+    "botocore.*",
+    "pdf2image.*",
+    "fitz.*",
+    "pytesseract.*",
+    "openpyxl.*",
+    "reportlab.*",
+    "torchvision.*",
+    "jose.*",
+    "supabase.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

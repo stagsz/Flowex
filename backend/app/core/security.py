@@ -33,7 +33,8 @@ class Auth0JWKSClient:
         jwks = await self._get_jwks()
         for key in jwks.get("keys", []):
             if key.get("kid") == kid:
-                return key
+                result: dict[str, Any] = key
+                return result
         return None
 
     async def _get_jwks(self) -> dict[str, Any]:
@@ -49,7 +50,8 @@ class Auth0JWKSClient:
         async with httpx.AsyncClient() as client:
             response = await client.get(self.jwks_uri)
             response.raise_for_status()
-            self._jwks = response.json()
+            jwks: dict[str, Any] = response.json()
+            self._jwks = jwks
             self._jwks_fetched_at = now
             return self._jwks
 
@@ -155,4 +157,5 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
     expire = now + (expires_delta or timedelta(hours=settings.ACCESS_TOKEN_EXPIRE_HOURS))
     to_encode.update({"exp": expire, "iat": now})
     # Use HS256 for internal tokens
-    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm="HS256")
+    encoded: str = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm="HS256")
+    return encoded

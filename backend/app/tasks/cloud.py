@@ -21,7 +21,7 @@ async def _import_file_async(
     file_id: str,
     project_id: str,
     file_name: str,
-) -> dict:
+) -> dict[str, Any]:
     """Async helper to import a single file."""
     async with AsyncSessionLocal() as db:
         service = CloudStorageService(db)
@@ -41,7 +41,7 @@ async def _export_file_async(
     filename: str,
     content: bytes,
     mime_type: str,
-) -> dict:
+) -> dict[str, Any]:
     """Async helper to export a single file."""
     async with AsyncSessionLocal() as db:
         service = CloudStorageService(db)
@@ -72,7 +72,7 @@ async def _get_cloud_file_info(
     connection_id: str,
     user_id: str,
     file_ids: list[str],
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Get file info for the files to import."""
     async with AsyncSessionLocal() as db:
         service = CloudStorageService(db)

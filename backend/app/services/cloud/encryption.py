@@ -41,6 +41,6 @@ class TokenEncryption:
             raise ValueError("Invalid or corrupted token")
 
     @classmethod
-    def generate_key() -> str:
+    def generate_key(cls) -> str:
         """Generate a new encryption key."""
         return Fernet.generate_key().decode()

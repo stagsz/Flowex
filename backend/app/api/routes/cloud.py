@@ -106,7 +106,7 @@ class ConfigureSharePointRequest(BaseModel):
 
 
 # In-memory state storage (in production, use Redis)
-_oauth_states: dict[str, dict] = {}
+_oauth_states: dict[str, dict[str, str]] = {}
 
 
 @router.get("/connections", response_model=list[CloudConnectionResponse])
@@ -139,7 +139,7 @@ async def initiate_connection(
     provider: str,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_async_db)],
-) -> dict:
+) -> dict[str, str]:
     """Initiate OAuth connection to a cloud provider."""
     valid_providers = ["onedrive", "sharepoint", "google_drive", "microsoft", "google"]
     if provider not in valid_providers:
@@ -406,7 +406,7 @@ async def list_sharepoint_sites(
     connection_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_async_db)],
-) -> list[dict]:
+) -> list[dict[str, str]]:
     """List available SharePoint sites."""
     service = CloudStorageService(db)
 
@@ -427,7 +427,7 @@ async def list_site_drives(
     site_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_async_db)],
-) -> list[dict]:
+) -> list[dict[str, str]]:
     """List drives (document libraries) in a SharePoint site."""
     service = CloudStorageService(db)
 
