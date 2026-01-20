@@ -6,15 +6,66 @@ Combines symbol detection and OCR for complete P&ID analysis.
 
 import io
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 import torch
 from PIL import Image
 
+from app.core.config import settings
 from app.ml.ocr_pipeline import ExtractedText, TagAssociator, get_ocr_pipeline
 
 logger = logging.getLogger(__name__)
+
+
+def download_model_from_supabase(
+    bucket: str,
+    remote_path: str,
+    local_path: str,
+) -> bool:
+    """
+    Download ML model from Supabase storage.
+
+    Args:
+        bucket: Supabase storage bucket name
+        remote_path: Path to model in bucket
+        local_path: Local path to save model
+
+    Returns:
+        True if download successful, False otherwise
+    """
+    try:
+        from supabase import create_client
+
+        if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
+            logger.warning("Supabase not configured, skipping model download")
+            return False
+
+        logger.info(f"Downloading model from Supabase: {bucket}/{remote_path}")
+
+        client = create_client(
+            settings.SUPABASE_URL,
+            settings.SUPABASE_SERVICE_ROLE_KEY
+        )
+
+        # Download file
+        response = client.storage.from_(bucket).download(remote_path)
+
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+
+        # Save to local path
+        with open(local_path, "wb") as f:
+            f.write(response)
+
+        size_mb = os.path.getsize(local_path) / (1024 * 1024)
+        logger.info(f"Model downloaded successfully: {local_path} ({size_mb:.1f} MB)")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to download model from Supabase: {e}")
+        return False
 
 
 @dataclass
@@ -279,8 +330,28 @@ _inference_service: InferenceService | None = None
 
 
 def get_inference_service() -> InferenceService:
-    """Get or create the inference service instance."""
+    """Get or create the inference service instance.
+
+    Automatically downloads the model from Supabase if not available locally.
+    """
     global _inference_service
     if _inference_service is None:
-        _inference_service = InferenceService()
+        model_path = settings.ML_MODEL_LOCAL_PATH
+
+        # Check if model exists locally
+        if not Path(model_path).exists():
+            logger.info(f"Model not found at {model_path}, attempting download from Supabase")
+            download_model_from_supabase(
+                bucket=settings.ML_MODEL_BUCKET,
+                remote_path=settings.ML_MODEL_PATH,
+                local_path=model_path,
+            )
+
+        # Initialize service with model path (or None if download failed)
+        if Path(model_path).exists():
+            _inference_service = InferenceService(model_path=model_path)
+        else:
+            logger.warning("No model available, inference will return empty results")
+            _inference_service = InferenceService()
+
     return _inference_service

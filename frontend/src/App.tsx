@@ -1,18 +1,26 @@
-import { useEffect } from "react"
+import { useEffect, lazy, Suspense } from "react"
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import * as Sentry from "@sentry/react"
 import { MainLayout } from "@/components/layout"
-import {
-  LoginPage,
-  AuthCallbackPage,
-  DashboardPage,
-  ProjectsPage,
-  DrawingsPage,
-  UploadPage,
-  ValidationPage,
-  SettingsIntegrationsPage,
-} from "@/pages"
 import { useAuthStore } from "@/stores/authStore"
+
+// Lazy-loaded page components for code splitting
+const LoginPage = lazy(() => import("@/pages/LoginPage").then(m => ({ default: m.LoginPage })))
+const AuthCallbackPage = lazy(() => import("@/pages/AuthCallbackPage").then(m => ({ default: m.AuthCallbackPage })))
+const DashboardPage = lazy(() => import("@/pages/DashboardPage").then(m => ({ default: m.DashboardPage })))
+const ProjectsPage = lazy(() => import("@/pages/ProjectsPage").then(m => ({ default: m.ProjectsPage })))
+const DrawingsPage = lazy(() => import("@/pages/DrawingsPage").then(m => ({ default: m.DrawingsPage })))
+const UploadPage = lazy(() => import("@/pages/UploadPage").then(m => ({ default: m.UploadPage })))
+const ValidationPage = lazy(() => import("@/pages/ValidationPage").then(m => ({ default: m.ValidationPage })))
+const SettingsIntegrationsPage = lazy(() => import("@/pages/SettingsIntegrationsPage").then(m => ({ default: m.SettingsIntegrationsPage })))
+
+function PageLoadingFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+    </div>
+  )
+}
 
 function ErrorFallback({ error, resetError }: { error: Error; resetError: () => void }) {
   return (
@@ -84,32 +92,34 @@ function App() {
       }}
     >
       <BrowserRouter>
-        <Routes>
-        {/* Public routes */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Suspense fallback={<PageLoadingFallback />}>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
-        {/* Protected routes with layout */}
-        <Route
-          element={
-            <ProtectedRoute>
-              <MainLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/projects" element={<ProjectsPage />} />
-          <Route path="/drawings" element={<DrawingsPage />} />
-          <Route path="/drawings/:drawingId/validate" element={<ValidationPage />} />
-          <Route path="/upload" element={<UploadPage />} />
-          <Route path="/settings/integrations" element={<SettingsIntegrationsPage />} />
-        </Route>
+            {/* Protected routes with layout */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <MainLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/projects" element={<ProjectsPage />} />
+              <Route path="/drawings" element={<DrawingsPage />} />
+              <Route path="/drawings/:drawingId/validate" element={<ValidationPage />} />
+              <Route path="/upload" element={<UploadPage />} />
+              <Route path="/settings/integrations" element={<SettingsIntegrationsPage />} />
+            </Route>
 
-        {/* Redirects */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </BrowserRouter>
+            {/* Redirects */}
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
     </Sentry.ErrorBoundary>
   )
 }

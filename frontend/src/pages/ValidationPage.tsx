@@ -33,13 +33,28 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  SYMBOL_CLASSES_BY_CATEGORY,
+  CATEGORY_LABELS,
+  getSymbolClassLabel,
+  type SymbolCategory,
+} from "@/lib/symbol-classes"
 
 // Save status types
 type SaveStatus = "idle" | "saving" | "saved" | "error"
 
 // Undo/Redo action types
 interface EditAction {
-  type: "verify" | "delete" | "update_tag" | "bulk_verify" | "flag" | "bulk_flag"
+  type: "verify" | "delete" | "update_tag" | "update_class" | "bulk_verify" | "flag" | "bulk_flag"
   symbolId: string
   previousState: DetectedSymbol | null
   newState: DetectedSymbol | null
@@ -707,6 +722,59 @@ export function ValidationPage() {
     }
   }, [drawingId, symbols, pushToUndoStack, showToast, markSaving, markSaved, markSaveError])
 
+  // Update symbol class/type
+  const updateSymbolClass = useCallback(async (symbolId: string, newClass: string, skipUndo = false) => {
+    const symbol = symbols.find(s => s.id === symbolId)
+    if (!symbol || symbol.symbolClass === newClass) return
+
+    // Determine the new category based on the symbol class
+    const categoryMap: Record<string, "equipment" | "instrument" | "valve" | "other"> = {
+      equipment: "equipment",
+      instrument: "instrument",
+      valve: "valve",
+      other: "other",
+    }
+    // Find which category this class belongs to
+    let newType: "equipment" | "instrument" | "valve" | "other" = symbol.type
+    for (const [category, classes] of Object.entries(SYMBOL_CLASSES_BY_CATEGORY)) {
+      if (classes.some(c => c.value === newClass)) {
+        newType = category as "equipment" | "instrument" | "valve" | "other"
+        break
+      }
+    }
+
+    markSaving()
+    try {
+      const response = await api.patch(
+        `/api/v1/drawings/${drawingId}/symbols/${symbolId}`,
+        { symbol_class: newClass }
+      )
+      if (response.ok) {
+        if (!skipUndo) {
+          pushToUndoStack({
+            type: "update_class",
+            symbolId,
+            previousState: { ...symbol },
+            newState: { ...symbol, symbolClass: newClass, type: newType },
+          })
+        }
+
+        setSymbols(prev =>
+          prev.map(s => s.id === symbolId ? { ...s, symbolClass: newClass, type: newType } : s)
+        )
+        markSaved()
+        showToast(`Updated class to: ${getSymbolClassLabel(newClass)}`)
+      } else {
+        markSaveError()
+        showToast("Failed to update symbol class")
+      }
+    } catch (err) {
+      console.error("Failed to update symbol class:", err)
+      markSaveError()
+      showToast("Failed to update symbol class")
+    }
+  }, [drawingId, symbols, pushToUndoStack, showToast, markSaving, markSaved, markSaveError])
+
   // Delete symbol (soft delete)
   const deleteSymbol = useCallback(async (symbolId: string, skipUndo = false) => {
     const symbol = symbols.find(s => s.id === symbolId)
@@ -815,6 +883,12 @@ export function ValidationPage() {
           showToast("Undone: tag change")
         }
         break
+      case "update_class":
+        if (action.previousState) {
+          await updateSymbolClass(action.symbolId, action.previousState.symbolClass, true)
+          showToast("Undone: class change")
+        }
+        break
       case "flag":
         if (action.previousState) {
           await unflagSymbol(action.symbolId)
@@ -831,7 +905,7 @@ export function ValidationPage() {
 
     // Push to redo stack
     setRedoStack(prev => [...prev, action])
-  }, [undoStack, unverifySymbol, bulkUnverifySymbols, unflagSymbol, bulkUnflagSymbols, restoreSymbol, updateSymbolTag, showToast])
+  }, [undoStack, unverifySymbol, bulkUnverifySymbols, unflagSymbol, bulkUnflagSymbols, restoreSymbol, updateSymbolTag, updateSymbolClass, showToast])
 
   // Redo last undone action
   const redo = useCallback(async () => {
@@ -871,6 +945,12 @@ export function ValidationPage() {
           showToast("Redone: tag change")
         }
         break
+      case "update_class":
+        if (action.newState) {
+          await updateSymbolClass(action.symbolId, action.newState.symbolClass, true)
+          showToast("Redone: class change")
+        }
+        break
       case "flag":
         await flagSymbol(action.symbolId, true)
         showToast("Redone: flag")
@@ -892,7 +972,7 @@ export function ValidationPage() {
 
     // Push back to undo stack
     setUndoStack(prev => [...prev, action])
-  }, [drawingId, redoStack, verifySymbol, flagSymbol, deleteSymbol, updateSymbolTag, showToast])
+  }, [drawingId, redoStack, verifySymbol, flagSymbol, deleteSymbol, updateSymbolTag, updateSymbolClass, showToast])
 
   const filteredSymbols = symbols.filter((symbol) => {
     const matchesSearch = symbol.tag.toLowerCase().includes(searchQuery.toLowerCase())
@@ -1528,8 +1608,32 @@ export function ValidationPage() {
                     className="h-8"
                   />
                 </div>
-                <div className="text-xs text-muted-foreground mb-2">
-                  Class: {symbols.find(s => s.id === selectedSymbol)?.symbolClass}
+                <div>
+                  <label className="text-xs text-muted-foreground">Class</label>
+                  <Select
+                    value={symbols.find(s => s.id === selectedSymbol)?.symbolClass || ""}
+                    onValueChange={(newClass) => updateSymbolClass(selectedSymbol, newClass)}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="Select class">
+                        {getSymbolClassLabel(symbols.find(s => s.id === selectedSymbol)?.symbolClass || "")}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="max-h-80">
+                      {(Object.entries(SYMBOL_CLASSES_BY_CATEGORY) as [SymbolCategory, typeof SYMBOL_CLASSES_BY_CATEGORY[SymbolCategory]][]).map(([category, classes]) => (
+                        <SelectGroup key={category}>
+                          <SelectLabel className="text-xs font-semibold text-muted-foreground">
+                            {CATEGORY_LABELS[category]}
+                          </SelectLabel>
+                          {classes.map((symbolClass) => (
+                            <SelectItem key={symbolClass.value} value={symbolClass.value}>
+                              {symbolClass.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="flex gap-2">
                   <Button
