@@ -377,6 +377,8 @@ _None_
 - [x] Deploy to production (Supabase stack) - `2026-01-20`
   - Backend: https://flowex-production-30eb.up.railway.app
   - Frontend: https://frontend-xi-seven-28.vercel.app
+  - Database/Auth/Storage: https://pkagkffjhvtbovxzaytx.supabase.co
+  - Redis: Upstash (legible-narwhal-23850.upstash.io)
   - Health checks passing, structured logging with correlation IDs working
 
 ---
