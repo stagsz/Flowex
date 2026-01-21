@@ -30,7 +30,7 @@ class Symbol(Base, UUIDMixin, TimestampMixin):
     )
     symbol_class: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     category: Mapped[SymbolCategory] = mapped_column(
-        Enum(SymbolCategory),
+        Enum(SymbolCategory, values_callable=lambda x: [e.value for e in x]),
         default=SymbolCategory.OTHER,
         nullable=False,
     )

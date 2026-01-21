@@ -493,7 +493,7 @@ export function ExportDialog({
             </p>
             {exportJob && (
               <p className="text-xs text-muted-foreground mt-2">
-                Job ID: {exportJob.jobId.slice(0, 8)}...
+                Job ID: {exportJob.jobId?.slice(0, 8) ?? "..."}...
               </p>
             )}
           </div>
