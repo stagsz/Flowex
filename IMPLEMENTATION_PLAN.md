@@ -598,6 +598,13 @@ _None_
   - Affected files: oauth_state.py, rate_limiting.py, cloud.py, processing.py
   - Mypy passes cleanly with 54 source files checked
 
+- [x] **Restore mypy type ignore comments for redis and Celery** - `990dd1c`
+  - Regression fix: Different mypy versions/configurations require different ignores
+  - Added `# type: ignore[no-untyped-call]` back to redis.from_url() calls
+  - Changed Celery task decorator ignores from `[untyped-decorator]` to `[misc]`
+  - Affected files: config.py, oauth_state.py, rate_limiting.py, cloud.py, processing.py
+  - Mypy now passes with 0 errors (checked 54 source files)
+
 ---
 
 ## Technical Decisions
