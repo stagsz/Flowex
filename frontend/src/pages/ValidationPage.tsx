@@ -255,15 +255,18 @@ function ExportDialog({
       const response = await api.get(`/api/v1/exports/jobs/${jobId}/status`)
       if (response.ok) {
         const data = await response.json()
+        console.log("Export job status:", data)
         setExportJob(data)
 
         if (data.status === "completed") {
+          console.log("Export completed, file_path:", data.file_path)
           setExportStatus("completed")
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current)
             pollIntervalRef.current = null
           }
         } else if (data.status === "failed") {
+          console.error("Export failed:", data.error)
           setExportStatus("error")
           setErrorMessage(data.error || "Export failed")
           if (pollIntervalRef.current) {
@@ -271,8 +274,11 @@ function ExportDialog({
             pollIntervalRef.current = null
           }
         }
+      } else {
+        console.error("Poll status failed:", response.status, await response.text())
       }
-    } catch {
+    } catch (err) {
+      console.error("Poll status error:", err)
       // Continue polling on network errors
     }
   }, [])
@@ -346,12 +352,27 @@ function ExportDialog({
 
   // Download completed export
   const downloadExport = useCallback(async () => {
-    if (!exportJob?.jobId) return
+    if (!exportJob?.jobId) {
+      console.error("No job ID for download")
+      return
+    }
+
+    console.log("Starting download for job:", exportJob.jobId)
 
     try {
       const response = await api.get(`/api/v1/exports/jobs/${exportJob.jobId}/download`)
+      console.log("Download response status:", response.status)
+
       if (response.ok) {
         const blob = await response.blob()
+        console.log("Downloaded blob size:", blob.size, "type:", blob.type)
+
+        if (blob.size === 0) {
+          console.error("Downloaded file is empty")
+          showToast("Downloaded file is empty")
+          return
+        }
+
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement("a")
         a.href = url
@@ -371,6 +392,7 @@ function ExportDialog({
           }
         }
         a.download = `${drawingName.replace(/\.[^/.]+$/, "")}${suffix}.${extension}`
+        console.log("Download filename:", a.download)
 
         document.body.appendChild(a)
         a.click()
@@ -380,9 +402,12 @@ function ExportDialog({
         showToast("Export downloaded successfully")
         onClose()
       } else {
-        showToast("Failed to download export")
+        const errorText = await response.text()
+        console.error("Download failed:", response.status, errorText)
+        showToast(`Failed to download export: ${errorText}`)
       }
-    } catch {
+    } catch (err) {
+      console.error("Download error:", err)
       showToast("Failed to download export")
     }
   }, [exportJob, exportType, dxfFormat, listsFormat, checklistFormat, selectedLists, drawingName, showToast, onClose])
@@ -1339,8 +1364,10 @@ export function ValidationPage() {
           is_verified: true, // Manual additions are considered verified
         }
       )
+      console.log("Create symbol response status:", response.status)
       if (response.ok) {
         const data = await response.json()
+        console.log("Symbol created successfully:", data)
         const newSymbol: DetectedSymbol = {
           id: data.id,
           type: category,
@@ -1369,8 +1396,10 @@ export function ValidationPage() {
         markSaved()
         showToast(`Added: ${getSymbolClassLabel(symbolClass)}${tagNumber ? ` (${tagNumber})` : ""}`)
       } else {
+        const errorText = await response.text()
+        console.error("Failed to add symbol:", response.status, errorText)
         markSaveError()
-        showToast("Failed to add symbol")
+        showToast(`Failed to add symbol: ${errorText}`)
       }
     } catch (err) {
       console.error("Failed to add symbol:", err)

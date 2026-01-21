@@ -30,6 +30,8 @@ export async function apiFetch(
   if (token) {
     const h = headers as Record<string, string>
     h["Authorization"] = `Bearer ${token}`
+  } else {
+    console.warn("API call without auth token:", endpoint)
   }
 
   // Add Content-Type for JSON bodies (but not for FormData)

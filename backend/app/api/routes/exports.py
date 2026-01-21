@@ -190,15 +190,20 @@ async def _process_dxf_export(
     """Background task to process DXF export."""
     from app.core.database import SessionLocal
 
+    logger.info(f"Starting DXF export for job {job_id}, drawing {drawing_id}")
+
     db = SessionLocal()
     try:
         drawing = db.query(Drawing).filter(Drawing.id == drawing_id).first()
         if not drawing:
+            logger.error(f"Drawing {drawing_id} not found for job {job_id}")
             _export_jobs[job_id]["status"] = "failed"
             _export_jobs[job_id]["error"] = "Drawing not found"
             return
 
+        logger.info(f"Found drawing: {drawing.original_filename}")
         symbols, lines, text_annotations = _get_drawing_data(db, drawing_id)
+        logger.info(f"Data: {len(symbols)} symbols, {len(lines)} lines, {len(text_annotations)} texts")
 
         # Create export options
         options = ExportOptions(
@@ -219,16 +224,18 @@ async def _process_dxf_export(
         )
 
         # Export
+        logger.info(f"Creating DXF export service for job {job_id}")
         service = DXFExportService()
         output_path = service.export_drawing(
             drawing, symbols, lines, text_annotations, options, title_info
         )
 
+        logger.info(f"DXF export completed for job {job_id}: {output_path}")
         _export_jobs[job_id]["status"] = "completed"
         _export_jobs[job_id]["file_path"] = str(output_path)
 
     except Exception as e:
-        logger.exception(f"DXF export failed for job {job_id}")
+        logger.exception(f"DXF export failed for job {job_id}: {e}")
         _export_jobs[job_id]["status"] = "failed"
         _export_jobs[job_id]["error"] = str(e)
     finally:
@@ -511,15 +518,20 @@ async def _process_checklist_export(
     """Background task to process validation checklist export."""
     from app.core.database import SessionLocal
 
+    logger.info(f"Starting checklist export for job {job_id}, drawing {drawing_id}")
+
     db = SessionLocal()
     try:
         drawing = db.query(Drawing).filter(Drawing.id == drawing_id).first()
         if not drawing:
+            logger.error(f"Drawing {drawing_id} not found for job {job_id}")
             _export_jobs[job_id]["status"] = "failed"
             _export_jobs[job_id]["error"] = "Drawing not found"
             return
 
+        logger.info(f"Found drawing: {drawing.original_filename}")
         symbols, lines, _ = _get_drawing_data(db, drawing_id)
+        logger.info(f"Data: {len(symbols)} symbols, {len(lines)} lines")
         metadata = _create_export_metadata(drawing, db)
 
         service = DataListExportService()
@@ -527,11 +539,12 @@ async def _process_checklist_export(
             drawing, symbols, lines, metadata, export_format, include_unverified
         )
 
+        logger.info(f"Checklist export completed for job {job_id}: {output_path}")
         _export_jobs[job_id]["status"] = "completed"
         _export_jobs[job_id]["file_path"] = str(output_path)
 
     except Exception as e:
-        logger.exception(f"Checklist export failed for job {job_id}")
+        logger.exception(f"Checklist export failed for job {job_id}: {e}")
         _export_jobs[job_id]["status"] = "failed"
         _export_jobs[job_id]["error"] = str(e)
     finally:
@@ -608,9 +621,14 @@ async def download_export(
     list_type: str = Query(default=None, description="List type for data list exports"),
 ) -> FileResponse:
     """Download the exported file."""
+    logger.info(f"Download request for job {job_id}, list_type={list_type}")
+
     job = _export_jobs.get(job_id)
     if not job:
+        logger.error(f"Job {job_id} not found in _export_jobs")
         raise HTTPException(status_code=404, detail="Export job not found")
+
+    logger.info(f"Job {job_id} status: {job['status']}, file_path: {job.get('file_path')}, file_paths: {job.get('file_paths')}")
 
     if job["status"] != "completed":
         raise HTTPException(
@@ -634,11 +652,15 @@ async def download_export(
                     file_path = path
                     break
 
+    logger.info(f"Resolved file_path for job {job_id}: {file_path}")
+
     if not file_path:
+        logger.error(f"No file path found for job {job_id}")
         raise HTTPException(status_code=404, detail="Export file not found")
 
     path = Path(file_path)
     if not path.exists():
+        logger.error(f"File does not exist: {file_path}")
         raise HTTPException(status_code=404, detail="Export file not found on disk")
 
     # Determine content type
