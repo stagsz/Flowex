@@ -228,7 +228,7 @@ _None_
 ---
 
 ### Phase 8.4: Validation Interface - Line/Connection Editing (Complete)
-- [x] Implement Line CRUD API endpoints (EDIT-05) - `6b461dc`
+- [x] Implement Line CRUD API endpoints (EDIT-05) - `524c54b`
   - GET /api/v1/drawings/{id}/lines - List all lines for a drawing
   - POST /api/v1/drawings/{id}/lines - Create a new line
   - PATCH /api/v1/drawings/{id}/lines/{id} - Update a line
