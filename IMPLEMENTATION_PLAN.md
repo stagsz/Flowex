@@ -543,6 +543,12 @@ _None_
   - Updated test to check for Dashboard content which is present when logged in
   - Synced package-lock.json with missing @radix-ui/react-label dependency
 
+- [x] **Fix mypy type errors in inference.py (dynamic imports)** - `0bd9f78`
+  - Removed unused type ignore comment for supabase import (attr-defined error)
+  - Added import-not-found type ignores for dynamic ml/training imports
+  - symbol_classes, model, model_mobile are loaded via sys.path at runtime
+  - Mypy now passes with 0 errors (was 4 errors)
+
 ---
 
 ## Technical Decisions
