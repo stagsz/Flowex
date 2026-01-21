@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { FeedbackWidget } from "@/components/feedback/FeedbackWidget"
 import { useAuthStore } from "@/stores/authStore"
 import { LogOut, Settings, User, HelpCircle } from "lucide-react"
 
@@ -40,6 +41,8 @@ export function Header() {
         </Link>
 
         <div className="flex-1" />
+
+        {user && <FeedbackWidget className="mr-2" />}
 
         {user ? (
           <DropdownMenu>

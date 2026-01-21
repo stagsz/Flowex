@@ -1,5 +1,11 @@
 # Database models
 from app.models.base import Base
+from app.models.beta_feedback import (
+    BetaFeedback,
+    FeedbackPriority,
+    FeedbackStatus,
+    FeedbackType,
+)
 from app.models.cloud_connection import CloudConnection, CloudProvider
 from app.models.drawing import Drawing, DrawingStatus, FileType
 from app.models.line import Line
@@ -26,4 +32,8 @@ __all__ = [
     "TextAnnotation",
     "CloudConnection",
     "CloudProvider",
+    "BetaFeedback",
+    "FeedbackType",
+    "FeedbackPriority",
+    "FeedbackStatus",
 ]

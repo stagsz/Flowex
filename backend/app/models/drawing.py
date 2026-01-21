@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
+    from app.models.beta_feedback import BetaFeedback
     from app.models.line import Line
     from app.models.project import Project
     from app.models.symbol import Symbol
@@ -67,4 +68,7 @@ class Drawing(Base, UUIDMixin, TimestampMixin):
     )
     text_annotations: Mapped[list["TextAnnotation"]] = relationship(
         "TextAnnotation", back_populates="drawing", cascade="all, delete-orphan"
+    )
+    beta_feedback: Mapped[list["BetaFeedback"]] = relationship(
+        "BetaFeedback", back_populates="drawing"
     )

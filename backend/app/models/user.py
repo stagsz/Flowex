@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
+    from app.models.beta_feedback import BetaFeedback
     from app.models.organization import Organization
 
 
@@ -45,3 +46,6 @@ class User(Base, UUIDMixin, TimestampMixin):
 
     # Relationships
     organization: Mapped["Organization"] = relationship("Organization", back_populates="users")
+    beta_feedback: Mapped[list["BetaFeedback"]] = relationship(
+        "BetaFeedback", back_populates="user", cascade="all, delete-orphan"
+    )
