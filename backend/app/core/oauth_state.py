@@ -49,7 +49,7 @@ class RedisOAuthStateStorage(OAuthStateStorage):
     def __init__(self) -> None:
         import redis
 
-        self._redis = redis.from_url(settings.REDIS_URL)  # type: ignore[no-untyped-call]
+        self._redis = redis.from_url(settings.REDIS_URL)
 
     def store(
         self,
@@ -165,7 +165,7 @@ def _create_storage() -> OAuthStateStorage:
     try:
         import redis
 
-        r = redis.from_url(settings.REDIS_URL)  # type: ignore[no-untyped-call]
+        r = redis.from_url(settings.REDIS_URL)
         r.ping()
         return RedisOAuthStateStorage()
     except Exception:
