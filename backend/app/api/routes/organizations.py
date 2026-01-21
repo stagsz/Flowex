@@ -120,7 +120,7 @@ class AuditLogResponse(BaseModel):
     entity_type: str | None
     entity_id: str | None
     ip_address: str | None
-    metadata: dict | None
+    metadata: dict[str, str] | None
     timestamp: datetime
 
     model_config = ConfigDict(from_attributes=True)

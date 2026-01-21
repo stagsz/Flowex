@@ -127,7 +127,7 @@ class AuditLog(Base, UUIDMixin):
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Additional context (JSON for flexibility)
-    extra_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    extra_data: Mapped[dict[str, str] | None] = mapped_column(JSON, nullable=True)
 
     # Timestamp
     timestamp: Mapped[datetime] = mapped_column(

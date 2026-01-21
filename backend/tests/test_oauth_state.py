@@ -1,11 +1,8 @@
 """Tests for Redis-based OAuth state storage."""
 
-import time
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
-
-import pytest
 
 from app.core.oauth_state import (
     InMemoryOAuthStateStorage,

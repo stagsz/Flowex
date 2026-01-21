@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -11,17 +11,13 @@ from app.api.routes.drawings import (
     BulkVerifyResponse,
     LineCreateRequest,
     LineResponse,
-    LineUpdateRequest,
     LinesResponse,
+    LineUpdateRequest,
     TitleBlockResponse,
     _extract_title_block_from_texts,
 )
 from app.main import app
-from app.services.drawings import (
-    MAX_FILE_SIZE,
-    FileValidationError,
-    validate_file,
-)
+from app.services.drawings import MAX_FILE_SIZE, FileValidationError, validate_file
 
 client = TestClient(app)
 

@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,7 +16,6 @@ from app.models import (
     User,
     UserRole,
 )
-
 
 client = TestClient(app)
 

@@ -1,13 +1,13 @@
 """Tests for GDPR user endpoints (data export, account deletion)."""
 
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_db
 from app.main import app
 from app.models import (
     CloudConnection,
@@ -194,23 +194,35 @@ class TestGDPRDataExportSuccess:
     def test_data_export_auth_bypass_returns_response(self):
         """Test data export with auth bypass triggers the endpoint logic.
 
-        Note: Full integration test would require database setup.
         This test verifies that the endpoint is accessible and returns
-        some response when auth is overridden.
+        the expected response when auth and database are mocked.
         """
         org = self._create_mock_org()
         user = self._create_mock_user(org)
 
-        # Override auth dependency
+        # Create mock DB session
+        mock_db = MagicMock()
+
+        # Mock organization query
+        mock_db.query.return_value.filter.return_value.first.return_value = org
+
+        # Mock projects query (empty list)
+        mock_db.query.return_value.filter.return_value.all.return_value = []
+
+        # Mock count queries (for symbols, lines, text annotations)
+        mock_db.query.return_value.join.return_value.join.return_value.filter.return_value.count.return_value = 0
+
+        # Override dependencies
         app.dependency_overrides[get_current_user] = lambda: user
+        app.dependency_overrides[get_db] = lambda: mock_db
 
         try:
             response = client.get("/api/v1/users/me/data-export")
-            # With auth bypassed but no real DB, we expect either:
-            # - 500 (DB lookup fails)
-            # - 200 (if somehow succeeds with mock)
-            # The important thing is we got past auth (not 403)
-            assert response.status_code != 403
+            # With auth and DB mocked, we should get a 200 response
+            assert response.status_code == 200
+            data = response.json()
+            assert data["user"]["email"] == "test@example.com"
+            assert data["gdpr_article"] == "Article 15 - Right of Access"
         finally:
             app.dependency_overrides.clear()
 
