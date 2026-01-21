@@ -78,6 +78,57 @@ def _get_or_create_dev_user(db: Session) -> User:
     return user
 
 
+def _get_or_create_user(db: Session, token: TokenPayload) -> User:
+    """Get or create a user from OAuth token (auto-provisioning for Supabase Auth)."""
+    if not token.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token missing email claim",
+        )
+
+    # Look up existing user
+    user = db.query(User).filter(User.email == token.email).first()
+    if user:
+        return user
+
+    # Auto-provision new user on first login
+    logger.info(f"Auto-provisioning new user: {token.email}")
+
+    # Create organization based on email domain
+    email_domain = token.email.split("@")[1] if "@" in token.email else "unknown"
+    org_slug = email_domain.replace(".", "-").lower()
+    org_name = email_domain.split(".")[0].capitalize()
+
+    # Check if organization exists (by slug or create new)
+    org = db.query(Organization).filter(Organization.slug == org_slug).first()
+    if not org:
+        org = Organization(
+            name=f"{org_name} Organization",
+            slug=org_slug,
+        )
+        db.add(org)
+        db.flush()
+        logger.info(f"Created organization: {org.name} ({org.slug})")
+
+    # Create user - first user in org becomes admin
+    existing_org_users = db.query(User).filter(User.organization_id == org.id).count()
+    user_role = UserRole.ADMIN if existing_org_users == 0 else UserRole.MEMBER
+
+    user = User(
+        email=token.email,
+        name=token.name or token.email.split("@")[0],
+        role=user_role,
+        organization_id=org.id,
+        sso_subject_id=token.sub,
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    logger.info(f"Created user: {user.email} (role: {user_role.value})")
+    return user
+
+
 async def get_current_user(
     db: Annotated[Session, Depends(get_db)],
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
@@ -108,12 +159,9 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         ) from e
 
-    user = db.query(User).filter(User.email == token.email).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
+    # Get or create user (auto-provisioning for OAuth users)
+    user = _get_or_create_user(db, token)
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
