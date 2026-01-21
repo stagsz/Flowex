@@ -154,14 +154,11 @@ async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
 ) -> User:
     """Get the current authenticated user."""
-    # Dev auth bypass - ONLY works in local development
-    # Requires: DEBUG=true, DEV_AUTH_BYPASS=true, AND no RAILWAY_* env vars
-    import os
-    is_railway = any(k.startswith("RAILWAY_") for k in os.environ)
-
-    if settings.DEBUG and settings.DEV_AUTH_BYPASS and not is_railway:
-        logger.warning("DEV_AUTH_BYPASS active (local dev) - using dev user")
-        return _get_or_create_dev_user(db)
+    # Dev auth bypass - DISABLED for security
+    # To enable locally, uncomment below and set DEBUG=true, DEV_AUTH_BYPASS=true
+    # if settings.DEBUG and settings.DEV_AUTH_BYPASS:
+    #     logger.warning("DEV_AUTH_BYPASS active - using dev user")
+    #     return _get_or_create_dev_user(db)
 
     # Normal auth flow
     if credentials is None:
