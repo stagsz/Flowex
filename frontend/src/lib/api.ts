@@ -1,6 +1,16 @@
 import { useAuthStore } from "@/stores/authStore"
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
+// Ensure API_URL has a protocol - handles case where env var is missing https://
+function normalizeApiUrl(url: string | undefined): string {
+  if (!url) return "http://localhost:8000"
+  // If URL doesn't start with http:// or https://, add https://
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    return `https://${url}`
+  }
+  return url
+}
+
+const API_URL = normalizeApiUrl(import.meta.env.VITE_API_URL)
 
 /**
  * Authenticated fetch wrapper that automatically includes the auth token

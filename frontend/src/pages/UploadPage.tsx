@@ -46,6 +46,7 @@ export function UploadPage() {
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [newProjectName, setNewProjectName] = useState("")
   const [isCreatingProject, setIsCreatingProject] = useState(false)
+  const [createProjectError, setCreateProjectError] = useState<string | null>(null)
 
   // Fetch projects from API
   useEffect(() => {
@@ -81,6 +82,7 @@ export function UploadPage() {
     if (!newProjectName.trim() || isCreatingProject) return
 
     setIsCreatingProject(true)
+    setCreateProjectError(null)
     try {
       const response = await api.post("/api/v1/projects/", {
         name: newProjectName.trim(),
@@ -92,9 +94,16 @@ export function UploadPage() {
         setSelectedProject(data.id)
         setNewProjectName("")
         setShowCreateProject(false)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.detail || `Error: ${response.status} ${response.statusText}`
+        setCreateProjectError(errorMessage)
+        console.error("Failed to create project:", errorMessage)
       }
-    } catch {
-      // Handle error silently for now
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Network error - please check your connection"
+      setCreateProjectError(errorMessage)
+      console.error("Failed to create project:", err)
     } finally {
       setIsCreatingProject(false)
     }
@@ -255,19 +264,27 @@ export function UploadPage() {
               Create New Project
             </Button>
           ) : (
-            <div className="mt-3 flex gap-2">
-              <Input
-                placeholder="Project name"
-                value={newProjectName}
-                onChange={(e) => setNewProjectName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && createProject()}
-              />
-              <Button onClick={createProject} disabled={isCreatingProject || !newProjectName.trim()}>
-                {isCreatingProject ? "Creating..." : "Create"}
-              </Button>
-              <Button variant="ghost" onClick={() => setShowCreateProject(false)}>
-                Cancel
-              </Button>
+            <div className="mt-3 space-y-2">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Project name"
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && createProject()}
+                />
+                <Button onClick={createProject} disabled={isCreatingProject || !newProjectName.trim()}>
+                  {isCreatingProject ? "Creating..." : "Create"}
+                </Button>
+                <Button variant="ghost" onClick={() => {
+                  setShowCreateProject(false)
+                  setCreateProjectError(null)
+                }}>
+                  Cancel
+                </Button>
+              </div>
+              {createProjectError && (
+                <p className="text-sm text-destructive">{createProjectError}</p>
+              )}
             </div>
           )}
         </CardContent>

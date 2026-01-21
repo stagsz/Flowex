@@ -53,6 +53,7 @@ export function ProjectsPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [newProjectName, setNewProjectName] = useState("")
   const [newProjectDescription, setNewProjectDescription] = useState("")
+  const [error, setError] = useState<string | null>(null)
 
   // Fetch projects from API
   useEffect(() => {
@@ -92,6 +93,7 @@ export function ProjectsPage() {
     if (!newProjectName.trim() || isCreating) return
 
     setIsCreating(true)
+    setError(null)
     try {
       const response = await api.post("/api/v1/projects/", {
         name: newProjectName.trim(),
@@ -111,9 +113,17 @@ export function ProjectsPage() {
         setNewProjectName("")
         setNewProjectDescription("")
         setIsDialogOpen(false)
+      } else {
+        // Handle API error responses
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.detail || `Error: ${response.status} ${response.statusText}`
+        setError(errorMessage)
+        console.error("Failed to create project:", errorMessage)
       }
-    } catch {
-      // Handle error silently for now
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Network error - please check your connection"
+      setError(errorMessage)
+      console.error("Failed to create project:", err)
     } finally {
       setIsCreating(false)
     }
@@ -153,7 +163,10 @@ export function ProjectsPage() {
             Manage your P&ID digitization projects
           </p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open)
+          if (!open) setError(null)
+        }}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="mr-2 h-4 w-4" />
@@ -192,6 +205,9 @@ export function ProjectsPage() {
                 />
               </div>
             </div>
+            {error && (
+              <p className="text-sm text-destructive">{error}</p>
+            )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                 Cancel
