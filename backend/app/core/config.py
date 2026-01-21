@@ -294,7 +294,8 @@ class Settings(BaseSettings):
         return health
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Only load .env file if not in production (Railway sets RAILWAY_ENVIRONMENT)
+        env_file=".env" if not os.environ.get("RAILWAY_ENVIRONMENT") else None,
         case_sensitive=True,
         extra="ignore",  # Ignore extra env vars (e.g., RAILWAY_TOKEN from Railway CLI)
     )
