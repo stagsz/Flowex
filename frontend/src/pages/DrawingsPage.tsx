@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import {
   Card,
@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
+import { ExportDialog } from "@/components/export/ExportDialog"
 
 interface Drawing {
   id: string
@@ -48,6 +49,17 @@ export function DrawingsPage() {
   )
   const [drawings, setDrawings] = useState<Drawing[]>([])
   const [loading, setLoading] = useState(true)
+  const [exportDrawing, setExportDrawing] = useState<Drawing | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const showToast = useCallback((message: string) => setToast(message), [])
+
+  // Auto-dismiss toast after 3 seconds
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast])
 
   // Fetch drawings from API
   useEffect(() => {
@@ -257,7 +269,12 @@ export function DrawingsPage() {
                       </Link>
                     </Button>
                     {(drawing.status === "complete" || drawing.status === "review") && (
-                      <Button variant="outline" size="sm">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setExportDrawing(drawing)}
+                        title="Export drawing"
+                      >
                         <Download className="h-4 w-4" />
                       </Button>
                     )}
@@ -291,6 +308,29 @@ export function DrawingsPage() {
               </Card>
             )
           })}
+        </div>
+      )}
+
+      {/* Export Dialog */}
+      {exportDrawing && (
+        <ExportDialog
+          drawingId={exportDrawing.id}
+          drawingName={exportDrawing.name}
+          onClose={() => setExportDrawing(null)}
+          showToast={showToast}
+        />
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50 bg-foreground text-background px-4 py-2 rounded-md shadow-lg animate-in fade-in slide-in-from-bottom-4">
+          {toast}
+          <button
+            className="ml-4 text-background/70 hover:text-background"
+            onClick={() => setToast(null)}
+          >
+            ×
+          </button>
         </div>
       )}
     </div>
