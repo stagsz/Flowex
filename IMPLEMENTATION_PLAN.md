@@ -257,6 +257,12 @@ _None_
   - Fixed ProtectedRoute to auto-verify token on startup
   - Fixed test selectors for proper element location (exact matching, scoped selectors)
   - Added @playwright/test dependency
+- [x] Add frontend unit tests for authStore - `2026-01-21`
+  - 18 unit tests for auth store (setUser, setToken, setError, login, logout, checkAuth)
+  - Tests for DEV_AUTH_BYPASS mode behavior
+  - Tests for user type validation (roles, optional avatar)
+  - Tests for state management (loading, error, persistence)
+  - Uses vi.hoisted() for proper mock hoisting with Supabase module
 - [x] Perform security audit - `SECURITY_AUDIT.md`
   - SQL Injection: PASS (all queries use SQLAlchemy ORM)
   - XSS: PASS (React auto-escaping, no dangerouslySetInnerHTML)
