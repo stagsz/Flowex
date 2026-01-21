@@ -48,8 +48,8 @@ export function ExportDialog({
   const [exportJob, setExportJob] = useState<ExportJob | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  // DXF export options
-  const [dxfFormat, setDxfFormat] = useState<"dxf" | "dwg">("dxf")
+  // DXF export options (DXF is the only format - DWG requires proprietary conversion)
+  const dxfFormat = "dxf" // DXF is universally supported by AutoCAD
   const [paperSize, setPaperSize] = useState("A1")
   const [scale, setScale] = useState("1:50")
   const [includeConnections, setIncludeConnections] = useState(true)
@@ -153,7 +153,6 @@ export function ExportDialog({
   }, [
     exportType,
     drawingId,
-    dxfFormat,
     paperSize,
     scale,
     includeConnections,
@@ -219,7 +218,7 @@ export function ExportDialog({
       console.error("Download error:", err)
       showToast("Failed to download export")
     }
-  }, [exportJob, exportType, dxfFormat, listsFormat, checklistFormat, selectedLists, drawingName, showToast, onClose])
+  }, [exportJob, exportType, listsFormat, checklistFormat, selectedLists, drawingName, showToast, onClose])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -269,7 +268,7 @@ export function ExportDialog({
                   <FileText className="h-5 w-5" />
                   <div className="text-left">
                     <div className="font-medium">AutoCAD</div>
-                    <div className="text-xs opacity-70">DXF/DWG</div>
+                    <div className="text-xs opacity-70">DXF Format</div>
                   </div>
                 </Button>
                 <Button
@@ -300,17 +299,11 @@ export function ExportDialog({
             {/* DXF Export Options */}
             {exportType === "dxf" && (
               <div className="space-y-4 mb-6">
-                <div>
-                  <label className="text-sm font-medium mb-1 block">Format</label>
-                  <Select value={dxfFormat} onValueChange={(v: "dxf" | "dwg") => setDxfFormat(v)}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="dxf">DXF (AutoCAD Exchange)</SelectItem>
-                      <SelectItem value="dwg">DWG (AutoCAD Native)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="rounded-md border p-3 bg-muted/50">
+                  <p className="text-sm text-muted-foreground">
+                    Exports as <strong>DXF format</strong> (AutoCAD Drawing Exchange Format).
+                    This format is fully compatible with AutoCAD and other CAD applications.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
