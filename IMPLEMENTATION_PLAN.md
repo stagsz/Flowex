@@ -590,6 +590,14 @@ _None_
   - Cleaned up redis.from_url type ignores (now properly typed)
   - Mypy now passes with 0 errors (checked 54 source files)
 
+- [x] **Update mypy type ignore comments for redis and Celery** - `871e176`
+  - Removed now-obsolete `# type: ignore[no-untyped-call]` from redis.from_url calls
+    (redis library now has proper type stubs, making these comments "unused" errors)
+  - Changed Celery task decorator ignores from `[misc]` to `[untyped-decorator]`
+    (correct error code for the actual mypy complaint)
+  - Affected files: oauth_state.py, rate_limiting.py, cloud.py, processing.py
+  - Mypy passes cleanly with 54 source files checked
+
 ---
 
 ## Technical Decisions
