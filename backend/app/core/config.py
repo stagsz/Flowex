@@ -273,7 +273,7 @@ class Settings(BaseSettings):
         # Check Redis connection
         try:
             import redis
-            r = redis.from_url(self.REDIS_URL)
+            r = redis.from_url(self.REDIS_URL)  # type: ignore[no-untyped-call]
             r.ping()
             health["checks"]["redis"] = {"status": "healthy"}
         except Exception as e:
