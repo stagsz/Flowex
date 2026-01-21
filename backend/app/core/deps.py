@@ -65,13 +65,16 @@ def _get_or_create_dev_user(db: Session) -> User:
         return user
 
     # Use real organization if available, otherwise create dev-org
+    org: Organization
     if real_org:
         org = real_org
         logger.info(f"Dev user will use existing organization: {org.name}")
     else:
         # Create dev organization only if no real org exists
-        org = db.query(Organization).filter(Organization.slug == "dev-org").first()
-        if not org:
+        existing_org = db.query(Organization).filter(Organization.slug == "dev-org").first()
+        if existing_org:
+            org = existing_org
+        else:
             org = Organization(
                 name="Dev Organization",
                 slug="dev-org",
@@ -151,11 +154,13 @@ async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
 ) -> User:
     """Get the current authenticated user."""
-    # Dev auth bypass - accepts no token or "dev-token" from frontend
+    # Debug log to check settings
+    logger.info(f"Auth check: DEBUG={settings.DEBUG}, DEV_AUTH_BYPASS={settings.DEV_AUTH_BYPASS}")
+
+    # Dev auth bypass - accepts any token when DEBUG and DEV_AUTH_BYPASS are enabled
     if settings.DEBUG and settings.DEV_AUTH_BYPASS:
-        if credentials is None or credentials.credentials == "dev-token":
-            logger.warning("DEV_AUTH_BYPASS active - using dev user")
-            return _get_or_create_dev_user(db)
+        logger.warning("DEV_AUTH_BYPASS active - using dev user")
+        return _get_or_create_dev_user(db)
 
     # Normal auth flow
     if credentials is None:
