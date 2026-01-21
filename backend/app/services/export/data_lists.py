@@ -3,6 +3,7 @@
 import csv
 import logging
 import tempfile
+import zipfile
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -1266,6 +1267,37 @@ class DataListExportService:
             return "Valves"
         else:
             return "Other"
+
+    def create_zip_from_files(
+        self,
+        file_paths: dict[str, Path | str],
+        zip_filename: str,
+    ) -> Path:
+        """
+        Create a zip file from multiple export files.
+
+        Args:
+            file_paths: Dict mapping list type to file path
+            zip_filename: Name for the output zip file
+
+        Returns:
+            Path to the created zip file
+        """
+        if not zip_filename.endswith(".zip"):
+            zip_filename = f"{zip_filename}.zip"
+
+        output_path = self.output_dir / zip_filename
+
+        with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for list_type, file_path in file_paths.items():
+                path = Path(file_path) if isinstance(file_path, str) else file_path
+                if path.exists():
+                    # Use the original filename in the zip
+                    zf.write(path, path.name)
+                    logger.info(f"Added {path.name} to zip")
+
+        logger.info(f"Created zip file: {output_path}")
+        return output_path
 
 
 def export_equipment_list(

@@ -330,6 +330,7 @@ async def _process_data_list_export(
 
         service = DataListExportService()
         file_paths: dict[str, str] = {}
+        successful_paths: dict[str, Path] = {}
 
         for list_type in list_types:
             try:
@@ -361,9 +362,20 @@ async def _process_data_list_export(
                     continue
 
                 file_paths[list_type] = str(path)
+                successful_paths[list_type] = path
             except Exception as e:
                 logger.exception(f"Failed to export {list_type}")
                 file_paths[list_type] = f"error: {str(e)}"
+
+        # If multiple files were created successfully, create a zip
+        if len(successful_paths) > 1:
+            drawing_name = drawing.original_filename.rsplit(".", 1)[0]
+            zip_filename = f"{drawing_name}_data_lists.zip"
+            zip_path = service.create_zip_from_files(successful_paths, zip_filename)
+            _export_jobs[job_id]["file_path"] = str(zip_path)
+        elif len(successful_paths) == 1:
+            # Single file - use it directly
+            _export_jobs[job_id]["file_path"] = str(next(iter(successful_paths.values())))
 
         _export_jobs[job_id]["status"] = "completed"
         _export_jobs[job_id]["file_paths"] = file_paths
@@ -636,6 +648,7 @@ async def download_export(
         ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ".csv": "text/csv",
         ".pdf": "application/pdf",
+        ".zip": "application/zip",
     }
     content_type = content_type_map.get(path.suffix, "application/octet-stream")
 
