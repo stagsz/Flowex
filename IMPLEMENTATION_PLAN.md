@@ -531,6 +531,12 @@ _None_
   - Fixed in dxf_export.py and data_lists.py
   - Remaining warnings are from third-party libraries (openpyxl, reportlab)
 
+- [x] **Fix failing frontend test for DEV_AUTH_BYPASS mode** - `640ee63`
+  - App.test.tsx was checking for "P&ID Digitization" from LoginPage
+  - With VITE_DEV_AUTH_BYPASS=true, app auto-logs in and shows Dashboard
+  - Updated test to check for Dashboard content which is present when logged in
+  - Synced package-lock.json with missing @radix-ui/react-label dependency
+
 ---
 
 ## Technical Decisions
