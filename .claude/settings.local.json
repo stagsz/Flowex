@@ -25,7 +25,8 @@
       "Bash(git pull:*)",
       "Bash(node node_modules/vite/bin/vite.js build:*)",
       "Bash(git -C D:/Flowex status)",
-      "Bash(powershell -Command \"cd D:\\\\Flowex\\\\backend; .\\\\.venv\\\\Scripts\\\\activate; python -c \"\"from app.ml.inference import download_model_from_supabase; print\\(''OK''\\)\"\"\")"
+      "Bash(powershell -Command \"cd D:\\\\Flowex\\\\backend; .\\\\.venv\\\\Scripts\\\\activate; python -c \"\"from app.ml.inference import download_model_from_supabase; print\\(''OK''\\)\"\"\")",
+      "Bash(powershell -Command \"cd D:\\\\Flowex\\\\backend; .\\\\.venv\\\\Scripts\\\\activate; python -m mypy app/ml/inference.py --ignore-missing-imports\")"
     ]
   }
 }
