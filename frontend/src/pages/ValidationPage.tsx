@@ -256,7 +256,12 @@ function ExportDialog({
       if (response.ok) {
         const data = await response.json()
         console.log("Export job status:", data)
-        setExportJob(data)
+        setExportJob({
+          jobId: data.job_id,
+          status: data.status,
+          filePath: data.file_path,
+          error: data.error,
+        })
 
         if (data.status === "completed") {
           console.log("Export completed, file_path:", data.file_path)

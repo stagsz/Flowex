@@ -73,7 +73,12 @@ export function ExportDialog({
       const response = await api.get(`/api/v1/exports/jobs/${jobId}/status`)
       if (response.ok) {
         const data = await response.json()
-        setExportJob(data)
+        setExportJob({
+          jobId: data.job_id,
+          status: data.status,
+          filePath: data.file_path,
+          error: data.error,
+        })
 
         if (data.status === "completed") {
           setExportStatus("completed")
