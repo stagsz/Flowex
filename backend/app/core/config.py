@@ -82,9 +82,9 @@ class Settings(BaseSettings):
     SUPABASE_JWT_SECRET: str = ""  # JWT secret from Supabase dashboard (Settings > API)
 
     # ML Model Configuration
-    ML_MODEL_BUCKET: str = "symbol_detector.pt"  # Supabase bucket for ML models
-    ML_MODEL_PATH: str = "symbol_detector_mobile (1).pt"  # Path to model in bucket
-    ML_MODEL_LOCAL_PATH: str = "/tmp/symbol_detector_mobile.pt"  # Local cache path
+    ML_MODEL_BUCKET: str = "models"  # Supabase bucket for ML models
+    ML_MODEL_PATH: str = "best_model.pt"  # Path to model in bucket (trained on real P&ID data)
+    ML_MODEL_LOCAL_PATH: str = "/tmp/best_model.pt"  # Local cache path
 
     # Authentication Provider: "supabase" or "auth0"
     AUTH_PROVIDER: str = "supabase"
@@ -273,7 +273,7 @@ class Settings(BaseSettings):
         # Check Redis connection
         try:
             import redis
-            r = redis.from_url(self.REDIS_URL)  # type: ignore[no-untyped-call]
+            r = redis.from_url(self.REDIS_URL)
             r.ping()
             health["checks"]["redis"] = {"status": "healthy"}
         except Exception as e:
