@@ -227,6 +227,20 @@ _None_
 
 ---
 
+### Phase 8.4: Validation Interface - Line/Connection Editing (Complete)
+- [x] Implement Line CRUD API endpoints (EDIT-05) - `6b461dc`
+  - GET /api/v1/drawings/{id}/lines - List all lines for a drawing
+  - POST /api/v1/drawings/{id}/lines - Create a new line
+  - PATCH /api/v1/drawings/{id}/lines/{id} - Update a line
+  - DELETE /api/v1/drawings/{id}/lines/{id} - Delete a line (soft/hard)
+  - POST /api/v1/drawings/{id}/lines/{id}/verify - Mark line as verified
+  - POST /api/v1/drawings/{id}/lines/{id}/unverify - Remove verification
+  - POST /api/v1/drawings/{id}/lines/bulk-verify - Bulk verify lines
+  - POST /api/v1/drawings/{id}/lines/{id}/restore - Restore soft-deleted line
+  - 24 new tests for Line endpoints (66 total in test_drawings.py)
+
+---
+
 ### Phase 8.3: AI Integration (Complete)
 - [x] Add AI inference to processing pipeline and symbols API
   - Integrated InferenceService into process_drawing Celery task

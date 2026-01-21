@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import StorageProvider, settings
 from app.core.deps import get_current_user, get_db
-from app.models import DrawingStatus, Project, Symbol, TextAnnotation, User
+from app.models import DrawingStatus, Line, Project, Symbol, TextAnnotation, User
 from app.models.symbol import SymbolCategory
 from app.services import drawings as drawing_service
 from app.services.drawings import FileValidationError
@@ -1173,3 +1173,493 @@ async def get_title_block(
 
     # Extract title block information
     return _extract_title_block_from_texts(texts)
+
+
+# =============================================================================
+# Line/Connection CRUD Endpoints (EDIT-05)
+# =============================================================================
+
+
+class LineResponse(BaseModel):
+    """Response model for a line/connection."""
+
+    id: str
+    line_number: str | None
+    start_x: float
+    start_y: float
+    end_x: float
+    end_y: float
+    line_spec: str | None
+    pipe_class: str | None
+    insulation: str | None
+    confidence: float | None
+    is_verified: bool
+    is_deleted: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LinesResponse(BaseModel):
+    """Response model for list of lines with summary."""
+
+    lines: list[LineResponse]
+    summary: dict[str, int]
+
+
+class LineCreateRequest(BaseModel):
+    """Request model for creating a new line."""
+
+    line_number: str | None = None
+    start_x: float
+    start_y: float
+    end_x: float
+    end_y: float
+    line_spec: str | None = None
+    pipe_class: str | None = None
+    insulation: str | None = None
+    confidence: float | None = None
+    is_verified: bool = False
+
+
+class LineUpdateRequest(BaseModel):
+    """Request model for updating a line."""
+
+    line_number: str | None = None
+    start_x: float | None = None
+    start_y: float | None = None
+    end_x: float | None = None
+    end_y: float | None = None
+    line_spec: str | None = None
+    pipe_class: str | None = None
+    insulation: str | None = None
+    is_verified: bool | None = None
+
+
+class BulkLineVerifyRequest(BaseModel):
+    """Request model for bulk line verification."""
+
+    line_ids: list[str]
+
+
+class BulkLineVerifyResponse(BaseModel):
+    """Response model for bulk line verification."""
+
+    verified_count: int
+    verified_ids: list[str]
+    failed_ids: list[str]
+
+
+@router.get("/{drawing_id}/lines", response_model=LinesResponse)
+async def get_drawing_lines(
+    drawing_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    include_deleted: bool = False,
+) -> LinesResponse:
+    """
+    Get all detected lines/connections for a drawing.
+
+    Lines represent piping connections between symbols on the P&ID.
+    """
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get lines
+    lines_query = db.query(Line).filter(Line.drawing_id == drawing_id)
+    if not include_deleted:
+        lines_query = lines_query.filter(Line.is_deleted == False)  # noqa: E712
+    lines = lines_query.order_by(Line.created_at).all()
+
+    # Build response
+    line_responses = [
+        LineResponse(
+            id=str(line.id),
+            line_number=line.line_number,
+            start_x=line.start_x,
+            start_y=line.start_y,
+            end_x=line.end_x,
+            end_y=line.end_y,
+            line_spec=line.line_spec,
+            pipe_class=line.pipe_class,
+            insulation=line.insulation,
+            confidence=line.confidence,
+            is_verified=line.is_verified,
+            is_deleted=line.is_deleted,
+        )
+        for line in lines
+    ]
+
+    # Summary stats
+    verified_lines = sum(1 for line in lines if line.is_verified)
+    low_confidence_lines = sum(
+        1 for line in lines if line.confidence and line.confidence < 0.85
+    )
+
+    return LinesResponse(
+        lines=line_responses,
+        summary={
+            "total_lines": len(lines),
+            "verified_lines": verified_lines,
+            "pending_lines": len(lines) - verified_lines,
+            "low_confidence_lines": low_confidence_lines,
+        },
+    )
+
+
+@router.post("/{drawing_id}/lines", response_model=LineResponse, status_code=201)
+async def create_line(
+    drawing_id: UUID,
+    line_data: LineCreateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> LineResponse:
+    """
+    Create a new line/connection (manually add a missing line).
+
+    Used when a piping connection was not detected by AI and needs to be added manually.
+    """
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Create new line
+    line = Line(
+        drawing_id=drawing_id,
+        line_number=line_data.line_number,
+        start_x=line_data.start_x,
+        start_y=line_data.start_y,
+        end_x=line_data.end_x,
+        end_y=line_data.end_y,
+        line_spec=line_data.line_spec,
+        pipe_class=line_data.pipe_class,
+        insulation=line_data.insulation,
+        confidence=line_data.confidence,
+        is_verified=line_data.is_verified,
+    )
+
+    db.add(line)
+    db.commit()
+    db.refresh(line)
+
+    return LineResponse(
+        id=str(line.id),
+        line_number=line.line_number,
+        start_x=line.start_x,
+        start_y=line.start_y,
+        end_x=line.end_x,
+        end_y=line.end_y,
+        line_spec=line.line_spec,
+        pipe_class=line.pipe_class,
+        insulation=line.insulation,
+        confidence=line.confidence,
+        is_verified=line.is_verified,
+        is_deleted=line.is_deleted,
+    )
+
+
+@router.patch("/{drawing_id}/lines/{line_id}", response_model=LineResponse)
+async def update_line(
+    drawing_id: UUID,
+    line_id: UUID,
+    update: LineUpdateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> LineResponse:
+    """
+    Update a line's properties.
+
+    Can update line number, coordinates, spec, pipe class, insulation, or verification status.
+    """
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get line
+    line = db.query(Line).filter(
+        Line.id == line_id,
+        Line.drawing_id == drawing_id,
+    ).first()
+    if not line:
+        raise HTTPException(status_code=404, detail="Line not found")
+
+    # Update fields
+    if update.line_number is not None:
+        line.line_number = update.line_number
+    if update.start_x is not None:
+        line.start_x = update.start_x
+    if update.start_y is not None:
+        line.start_y = update.start_y
+    if update.end_x is not None:
+        line.end_x = update.end_x
+    if update.end_y is not None:
+        line.end_y = update.end_y
+    if update.line_spec is not None:
+        line.line_spec = update.line_spec
+    if update.pipe_class is not None:
+        line.pipe_class = update.pipe_class
+    if update.insulation is not None:
+        line.insulation = update.insulation
+    if update.is_verified is not None:
+        line.is_verified = update.is_verified
+
+    db.commit()
+    db.refresh(line)
+
+    return LineResponse(
+        id=str(line.id),
+        line_number=line.line_number,
+        start_x=line.start_x,
+        start_y=line.start_y,
+        end_x=line.end_x,
+        end_y=line.end_y,
+        line_spec=line.line_spec,
+        pipe_class=line.pipe_class,
+        insulation=line.insulation,
+        confidence=line.confidence,
+        is_verified=line.is_verified,
+        is_deleted=line.is_deleted,
+    )
+
+
+@router.delete("/{drawing_id}/lines/{line_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_line(
+    drawing_id: UUID,
+    line_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    hard_delete: bool = False,
+) -> None:
+    """
+    Soft-delete a line (or hard delete if specified).
+
+    Soft delete marks the line as deleted but keeps it for undo/redo.
+    Hard delete permanently removes the line from the database.
+    """
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get line
+    line = db.query(Line).filter(
+        Line.id == line_id,
+        Line.drawing_id == drawing_id,
+    ).first()
+    if not line:
+        raise HTTPException(status_code=404, detail="Line not found")
+
+    if hard_delete:
+        db.delete(line)
+    else:
+        line.is_deleted = True
+    db.commit()
+
+
+@router.post("/{drawing_id}/lines/{line_id}/verify", response_model=LineResponse)
+async def verify_line(
+    drawing_id: UUID,
+    line_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> LineResponse:
+    """Mark a line as verified."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get line
+    line = db.query(Line).filter(
+        Line.id == line_id,
+        Line.drawing_id == drawing_id,
+    ).first()
+    if not line:
+        raise HTTPException(status_code=404, detail="Line not found")
+
+    line.is_verified = True
+    db.commit()
+    db.refresh(line)
+
+    return LineResponse(
+        id=str(line.id),
+        line_number=line.line_number,
+        start_x=line.start_x,
+        start_y=line.start_y,
+        end_x=line.end_x,
+        end_y=line.end_y,
+        line_spec=line.line_spec,
+        pipe_class=line.pipe_class,
+        insulation=line.insulation,
+        confidence=line.confidence,
+        is_verified=line.is_verified,
+        is_deleted=line.is_deleted,
+    )
+
+
+@router.post("/{drawing_id}/lines/{line_id}/unverify", response_model=LineResponse)
+async def unverify_line(
+    drawing_id: UUID,
+    line_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> LineResponse:
+    """Remove verification from a line."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get line
+    line = db.query(Line).filter(
+        Line.id == line_id,
+        Line.drawing_id == drawing_id,
+    ).first()
+    if not line:
+        raise HTTPException(status_code=404, detail="Line not found")
+
+    line.is_verified = False
+    db.commit()
+    db.refresh(line)
+
+    return LineResponse(
+        id=str(line.id),
+        line_number=line.line_number,
+        start_x=line.start_x,
+        start_y=line.start_y,
+        end_x=line.end_x,
+        end_y=line.end_y,
+        line_spec=line.line_spec,
+        pipe_class=line.pipe_class,
+        insulation=line.insulation,
+        confidence=line.confidence,
+        is_verified=line.is_verified,
+        is_deleted=line.is_deleted,
+    )
+
+
+@router.post("/{drawing_id}/lines/bulk-verify", response_model=BulkLineVerifyResponse)
+async def bulk_verify_lines(
+    drawing_id: UUID,
+    request: BulkLineVerifyRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> BulkLineVerifyResponse:
+    """Mark multiple lines as verified in a single operation."""
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    verified_ids: list[str] = []
+    failed_ids: list[str] = []
+
+    for line_id_str in request.line_ids:
+        try:
+            line_id = UUID(line_id_str)
+            line = db.query(Line).filter(
+                Line.id == line_id,
+                Line.drawing_id == drawing_id,
+            ).first()
+            if line and not line.is_verified:
+                line.is_verified = True
+                verified_ids.append(line_id_str)
+            elif line and line.is_verified:
+                # Already verified, still count as success
+                verified_ids.append(line_id_str)
+            else:
+                failed_ids.append(line_id_str)
+        except (ValueError, TypeError):
+            # Invalid UUID format
+            failed_ids.append(line_id_str)
+
+    db.commit()
+
+    return BulkLineVerifyResponse(
+        verified_count=len(verified_ids),
+        verified_ids=verified_ids,
+        failed_ids=failed_ids,
+    )
+
+
+@router.post("/{drawing_id}/lines/{line_id}/restore", response_model=LineResponse)
+async def restore_line(
+    drawing_id: UUID,
+    line_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> LineResponse:
+    """
+    Restore a soft-deleted line.
+
+    Used for undo functionality after deleting a line.
+    """
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get line (including deleted)
+    line = db.query(Line).filter(
+        Line.id == line_id,
+        Line.drawing_id == drawing_id,
+    ).first()
+    if not line:
+        raise HTTPException(status_code=404, detail="Line not found")
+
+    if not line.is_deleted:
+        raise HTTPException(status_code=400, detail="Line is not deleted")
+
+    line.is_deleted = False
+    db.commit()
+    db.refresh(line)
+
+    return LineResponse(
+        id=str(line.id),
+        line_number=line.line_number,
+        start_x=line.start_x,
+        start_y=line.start_y,
+        end_x=line.end_x,
+        end_y=line.end_y,
+        line_spec=line.line_spec,
+        pipe_class=line.pipe_class,
+        insulation=line.insulation,
+        confidence=line.confidence,
+        is_verified=line.is_verified,
+        is_deleted=line.is_deleted,
+    )

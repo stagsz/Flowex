@@ -5,8 +5,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.routes.drawings import (
+    BulkLineVerifyRequest,
+    BulkLineVerifyResponse,
     BulkVerifyRequest,
     BulkVerifyResponse,
+    LineCreateRequest,
+    LineResponse,
+    LineUpdateRequest,
+    LinesResponse,
     TitleBlockResponse,
     _extract_title_block_from_texts,
 )
@@ -404,4 +410,313 @@ class TestTitleBlockEndpoint:
         """Test title block with invalid drawing ID requires auth first."""
         response = client.get("/api/v1/drawings/invalid-uuid/title-block")
         # Auth check happens before validation, so returns 403
+        assert response.status_code == 403
+
+
+# =============================================================================
+# Line/Connection CRUD Tests (EDIT-05)
+# =============================================================================
+
+
+class TestLineResponseModel:
+    """Tests for LineResponse model."""
+
+    def test_line_response_structure(self):
+        """Test LineResponse has correct structure."""
+        response = LineResponse(
+            id="test-id",
+            line_number="L-001",
+            start_x=100.0,
+            start_y=200.0,
+            end_x=300.0,
+            end_y=400.0,
+            line_spec="6\"-CS-A1A",
+            pipe_class="A1A",
+            insulation="INSUL",
+            confidence=0.95,
+            is_verified=True,
+            is_deleted=False,
+        )
+        assert response.id == "test-id"
+        assert response.line_number == "L-001"
+        assert response.start_x == 100.0
+        assert response.end_x == 300.0
+        assert response.is_verified is True
+
+    def test_line_response_optional_fields(self):
+        """Test LineResponse with optional fields as None."""
+        response = LineResponse(
+            id="test-id",
+            line_number=None,
+            start_x=100.0,
+            start_y=200.0,
+            end_x=300.0,
+            end_y=400.0,
+            line_spec=None,
+            pipe_class=None,
+            insulation=None,
+            confidence=None,
+            is_verified=False,
+            is_deleted=False,
+        )
+        assert response.line_number is None
+        assert response.line_spec is None
+        assert response.confidence is None
+
+
+class TestLinesResponseModel:
+    """Tests for LinesResponse model."""
+
+    def test_lines_response_structure(self):
+        """Test LinesResponse has correct structure."""
+        response = LinesResponse(
+            lines=[
+                LineResponse(
+                    id="1",
+                    line_number="L-001",
+                    start_x=0, start_y=0, end_x=100, end_y=100,
+                    line_spec=None, pipe_class=None, insulation=None,
+                    confidence=0.9, is_verified=True, is_deleted=False,
+                ),
+                LineResponse(
+                    id="2",
+                    line_number="L-002",
+                    start_x=100, start_y=100, end_x=200, end_y=200,
+                    line_spec=None, pipe_class=None, insulation=None,
+                    confidence=0.8, is_verified=False, is_deleted=False,
+                ),
+            ],
+            summary={
+                "total_lines": 2,
+                "verified_lines": 1,
+                "pending_lines": 1,
+                "low_confidence_lines": 0,
+            },
+        )
+        assert len(response.lines) == 2
+        assert response.summary["total_lines"] == 2
+        assert response.summary["verified_lines"] == 1
+
+    def test_lines_response_empty(self):
+        """Test LinesResponse with empty lines list."""
+        response = LinesResponse(
+            lines=[],
+            summary={
+                "total_lines": 0,
+                "verified_lines": 0,
+                "pending_lines": 0,
+                "low_confidence_lines": 0,
+            },
+        )
+        assert len(response.lines) == 0
+        assert response.summary["total_lines"] == 0
+
+
+class TestLineCreateRequest:
+    """Tests for LineCreateRequest model."""
+
+    def test_line_create_request_full(self):
+        """Test LineCreateRequest with all fields."""
+        request = LineCreateRequest(
+            line_number="L-001",
+            start_x=100.0,
+            start_y=200.0,
+            end_x=300.0,
+            end_y=400.0,
+            line_spec="6\"-CS-A1A",
+            pipe_class="A1A",
+            insulation="INSUL",
+            confidence=0.95,
+            is_verified=True,
+        )
+        assert request.line_number == "L-001"
+        assert request.start_x == 100.0
+        assert request.is_verified is True
+
+    def test_line_create_request_minimal(self):
+        """Test LineCreateRequest with only required fields."""
+        request = LineCreateRequest(
+            start_x=100.0,
+            start_y=200.0,
+            end_x=300.0,
+            end_y=400.0,
+        )
+        assert request.line_number is None
+        assert request.line_spec is None
+        assert request.is_verified is False
+
+
+class TestLineUpdateRequest:
+    """Tests for LineUpdateRequest model."""
+
+    def test_line_update_request_all_fields(self):
+        """Test LineUpdateRequest with all fields."""
+        request = LineUpdateRequest(
+            line_number="L-002",
+            start_x=150.0,
+            start_y=250.0,
+            end_x=350.0,
+            end_y=450.0,
+            line_spec="8\"-CS-B1B",
+            pipe_class="B1B",
+            insulation="NONE",
+            is_verified=True,
+        )
+        assert request.line_number == "L-002"
+        assert request.start_x == 150.0
+        assert request.is_verified is True
+
+    def test_line_update_request_partial(self):
+        """Test LineUpdateRequest with only some fields."""
+        request = LineUpdateRequest(
+            line_number="L-003",
+            is_verified=True,
+        )
+        assert request.line_number == "L-003"
+        assert request.start_x is None
+        assert request.is_verified is True
+
+    def test_line_update_request_empty(self):
+        """Test LineUpdateRequest with no fields (all None)."""
+        request = LineUpdateRequest()
+        assert request.line_number is None
+        assert request.start_x is None
+        assert request.is_verified is None
+
+
+class TestBulkLineVerifyRequest:
+    """Tests for BulkLineVerifyRequest model."""
+
+    def test_bulk_line_verify_request_single_id(self):
+        """Test valid request with single line ID."""
+        request = BulkLineVerifyRequest(line_ids=["line-123"])
+        assert request.line_ids == ["line-123"]
+
+    def test_bulk_line_verify_request_multiple_ids(self):
+        """Test valid request with multiple line IDs."""
+        ids = [str(uuid4()) for _ in range(5)]
+        request = BulkLineVerifyRequest(line_ids=ids)
+        assert len(request.line_ids) == 5
+
+    def test_bulk_line_verify_request_empty(self):
+        """Test that empty list is valid."""
+        request = BulkLineVerifyRequest(line_ids=[])
+        assert request.line_ids == []
+
+
+class TestBulkLineVerifyResponse:
+    """Tests for BulkLineVerifyResponse model."""
+
+    def test_bulk_line_verify_response_structure(self):
+        """Test response has correct structure."""
+        response = BulkLineVerifyResponse(
+            verified_count=3,
+            verified_ids=["a", "b", "c"],
+            failed_ids=["d"],
+        )
+        assert response.verified_count == 3
+        assert len(response.verified_ids) == 3
+        assert len(response.failed_ids) == 1
+
+    def test_bulk_line_verify_response_all_verified(self):
+        """Test response when all lines are verified."""
+        ids = ["a", "b", "c"]
+        response = BulkLineVerifyResponse(
+            verified_count=3,
+            verified_ids=ids,
+            failed_ids=[],
+        )
+        assert response.failed_ids == []
+
+
+class TestLinesEndpointAuth:
+    """Tests for line endpoints authentication and access control."""
+
+    def test_get_lines_requires_auth(self):
+        """Test get lines endpoint requires authentication."""
+        drawing_id = str(uuid4())
+        response = client.get(f"/api/v1/drawings/{drawing_id}/lines")
+        assert response.status_code == 403
+
+    def test_create_line_requires_auth(self):
+        """Test create line endpoint requires authentication."""
+        drawing_id = str(uuid4())
+        response = client.post(
+            f"/api/v1/drawings/{drawing_id}/lines",
+            json={
+                "start_x": 100.0,
+                "start_y": 200.0,
+                "end_x": 300.0,
+                "end_y": 400.0,
+            },
+        )
+        assert response.status_code == 403
+
+    def test_update_line_requires_auth(self):
+        """Test update line endpoint requires authentication."""
+        drawing_id = str(uuid4())
+        line_id = str(uuid4())
+        response = client.patch(
+            f"/api/v1/drawings/{drawing_id}/lines/{line_id}",
+            json={"line_number": "L-001"},
+        )
+        assert response.status_code == 403
+
+    def test_delete_line_requires_auth(self):
+        """Test delete line endpoint requires authentication."""
+        drawing_id = str(uuid4())
+        line_id = str(uuid4())
+        response = client.delete(
+            f"/api/v1/drawings/{drawing_id}/lines/{line_id}",
+        )
+        assert response.status_code == 403
+
+    def test_verify_line_requires_auth(self):
+        """Test verify line endpoint requires authentication."""
+        drawing_id = str(uuid4())
+        line_id = str(uuid4())
+        response = client.post(
+            f"/api/v1/drawings/{drawing_id}/lines/{line_id}/verify",
+        )
+        assert response.status_code == 403
+
+    def test_unverify_line_requires_auth(self):
+        """Test unverify line endpoint requires authentication."""
+        drawing_id = str(uuid4())
+        line_id = str(uuid4())
+        response = client.post(
+            f"/api/v1/drawings/{drawing_id}/lines/{line_id}/unverify",
+        )
+        assert response.status_code == 403
+
+    def test_bulk_verify_lines_requires_auth(self):
+        """Test bulk verify lines endpoint requires authentication."""
+        drawing_id = str(uuid4())
+        response = client.post(
+            f"/api/v1/drawings/{drawing_id}/lines/bulk-verify",
+            json={"line_ids": [str(uuid4())]},
+        )
+        assert response.status_code == 403
+
+    def test_restore_line_requires_auth(self):
+        """Test restore line endpoint requires authentication."""
+        drawing_id = str(uuid4())
+        line_id = str(uuid4())
+        response = client.post(
+            f"/api/v1/drawings/{drawing_id}/lines/{line_id}/restore",
+        )
+        assert response.status_code == 403
+
+    def test_invalid_drawing_id_requires_auth(self):
+        """Test that invalid drawing ID still requires auth first."""
+        response = client.get("/api/v1/drawings/invalid-uuid/lines")
+        assert response.status_code == 403
+
+    def test_invalid_line_id_requires_auth(self):
+        """Test that invalid line ID still requires auth first."""
+        drawing_id = str(uuid4())
+        response = client.patch(
+            f"/api/v1/drawings/{drawing_id}/lines/invalid-uuid",
+            json={"line_number": "L-001"},
+        )
         assert response.status_code == 403
