@@ -8,6 +8,7 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from app.models.beta_feedback import BetaFeedback
+    from app.models.organization_invite import OrganizationInvite
     from app.models.project import Project
     from app.models.user import User
 
@@ -37,4 +38,7 @@ class Organization(Base, UUIDMixin, TimestampMixin):
     projects: Mapped[list["Project"]] = relationship("Project", back_populates="organization")
     beta_feedback: Mapped[list["BetaFeedback"]] = relationship(
         "BetaFeedback", back_populates="organization", cascade="all, delete-orphan"
+    )
+    invites: Mapped[list["OrganizationInvite"]] = relationship(
+        "OrganizationInvite", back_populates="organization", cascade="all, delete-orphan"
     )

@@ -10,6 +10,7 @@ from app.models.cloud_connection import CloudConnection, CloudProvider
 from app.models.drawing import Drawing, DrawingStatus, FileType
 from app.models.line import Line
 from app.models.organization import Organization, SubscriptionTier
+from app.models.organization_invite import InviteStatus, OrganizationInvite
 from app.models.project import Project
 from app.models.symbol import Symbol, SymbolCategory
 from app.models.text_annotation import TextAnnotation
@@ -19,6 +20,8 @@ __all__ = [
     "Base",
     "Organization",
     "SubscriptionTier",
+    "OrganizationInvite",
+    "InviteStatus",
     "User",
     "UserRole",
     "SSOProvider",
