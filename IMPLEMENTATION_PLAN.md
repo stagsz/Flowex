@@ -580,6 +580,16 @@ _None_
   - symbol_classes, model, model_mobile are loaded via sys.path at runtime
   - Mypy now passes with 0 errors (was 4 errors)
 
+- [x] **Resolve all mypy type errors in backend** - `84aaa9f`
+  - Added types-Pillow to requirements.txt for PIL type stubs
+  - Updated pyproject.toml to ignore missing imports for all third-party libraries
+  - Fixed supabase import and type annotations in storage.py and inference.py
+  - Fixed dict type annotation in exports.py for create_zip_from_files
+  - Removed unused type: ignore comments that were no longer needed
+  - Added proper untyped-decorator ignores for Celery task decorators
+  - Cleaned up redis.from_url type ignores (now properly typed)
+  - Mypy now passes with 0 errors (checked 54 source files)
+
 ---
 
 ## Technical Decisions

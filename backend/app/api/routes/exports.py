@@ -337,7 +337,7 @@ async def _process_data_list_export(
 
         service = DataListExportService()
         file_paths: dict[str, str] = {}
-        successful_paths: dict[str, Path] = {}
+        successful_paths: dict[str, Path | str] = {}
 
         for list_type in list_types:
             try:

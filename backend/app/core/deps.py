@@ -50,31 +50,48 @@ def _get_or_create_dev_user(db: Session) -> User:
     """Get or create a development user for auth bypass."""
     dev_email = "dev@flowex.local"
     user = db.query(User).filter(User.email == dev_email).first()
+
+    # Try to use the first real organization (not dev-org) for better dev experience
+    # This allows dev user to access existing projects
+    real_org = db.query(Organization).filter(Organization.slug != "dev-org").first()
+
     if user:
+        # Update dev user to use real org if available and different
+        if real_org and user.organization_id != real_org.id:
+            user.organization_id = real_org.id
+            db.commit()
+            db.refresh(user)
+            logger.info(f"Updated dev user to organization: {real_org.name}")
         return user
 
-    # Create dev organization if needed
-    dev_org = db.query(Organization).filter(Organization.slug == "dev-org").first()
-    if not dev_org:
-        dev_org = Organization(
-            name="Dev Organization",
-            slug="dev-org",
-        )
-        db.add(dev_org)
-        db.flush()
+    # Use real organization if available, otherwise create dev-org
+    if real_org:
+        org = real_org
+        logger.info(f"Dev user will use existing organization: {org.name}")
+    else:
+        # Create dev organization only if no real org exists
+        org = db.query(Organization).filter(Organization.slug == "dev-org").first()
+        if not org:
+            org = Organization(
+                name="Dev Organization",
+                slug="dev-org",
+            )
+            db.add(org)
+            db.flush()
+            logger.info("Created dev organization")
 
     # Create dev user
     user = User(
         email=dev_email,
         name="Dev User",
         role=UserRole.ADMIN,
-        organization_id=dev_org.id,
+        organization_id=org.id,
         is_active=True,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
-    logger.info("Created dev user for auth bypass")
+    logger.info(f"Created dev user in organization: {org.name}")
     return user
 
 

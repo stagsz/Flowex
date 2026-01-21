@@ -169,7 +169,7 @@ class InferenceService:
             # Import from ml training module (dynamic import, path set at runtime)
             import sys
             sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "ml" / "training"))
-            from symbol_classes import get_class_names  # noqa: F401
+            from symbol_classes import get_class_names
             class_names: list[str] = get_class_names()
             return ["__background__"] + class_names
         except ImportError:
@@ -190,11 +190,11 @@ class InferenceService:
 
             # Check if it's a MobileNet model
             if "backbone_name" in checkpoint and "mobilenet" in checkpoint.get("backbone_name", ""):
-                from model_mobile import MobileSymbolDetector  # noqa: F401
+                from model_mobile import MobileSymbolDetector
                 self.symbol_model = MobileSymbolDetector.load(path, device=self.device)
                 logger.info(f"Loaded MobileNet model from {path}")
             else:
-                from model import SymbolDetector  # noqa: F401
+                from model import SymbolDetector
                 self.symbol_model = SymbolDetector.load(path, device=self.device)
                 logger.info(f"Loaded ResNet model from {path}")
 

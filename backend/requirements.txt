@@ -51,6 +51,7 @@ pytest-benchmark>=4.0.0
 # Linting & typing
 ruff==0.2.1
 mypy==1.8.0
+types-Pillow>=10.2.0
 
 # CAD Export
 ezdxf==1.1.4

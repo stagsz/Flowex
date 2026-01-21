@@ -37,6 +37,18 @@ module = [
     "torchvision.*",
     "jose.*",
     "supabase.*",
+    "ezdxf.*",
+    "fastapi.*",
+    "starlette.*",
+    "slowapi.*",
+    "sentry_sdk.*",
+    "sqlalchemy.*",
+    "httpx.*",
+    "torch.*",
+    "numpy.*",
+    "symbol_classes",
+    "model",
+    "model_mobile",
 ]
 ignore_missing_imports = true
 
