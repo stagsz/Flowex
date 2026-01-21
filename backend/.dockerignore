@@ -20,8 +20,15 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual environments
+# Environment files (NEVER include in production image)
 .env
+.env.*
+.env.local
+.env.development
+.env.production
+.env.railway
+
+# Virtual environments
 .venv
 env/
 venv/

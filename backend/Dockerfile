@@ -24,7 +24,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
     # Tesseract data path
-    TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
+    TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata \
+    # Production defaults - disable dev auth bypass
+    DEBUG=false \
+    DEV_AUTH_BYPASS=false
 
 WORKDIR /app
 
