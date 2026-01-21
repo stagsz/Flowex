@@ -83,8 +83,8 @@ class Settings(BaseSettings):
 
     # ML Model Configuration
     ML_MODEL_BUCKET: str = "symbol_detector.pt"  # Supabase bucket for ML models
-    ML_MODEL_PATH: str = "symbol_detector_mobile.pt"  # Path to model in bucket
-    ML_MODEL_LOCAL_PATH: str = "/tmp/symbol_detector.pt"  # Local cache path
+    ML_MODEL_PATH: str = "symbol_detector_mobile (1).pt"  # Path to model in bucket
+    ML_MODEL_LOCAL_PATH: str = "/tmp/symbol_detector_mobile.pt"  # Local cache path
 
     # Authentication Provider: "supabase" or "auth0"
     AUTH_PROVIDER: str = "supabase"

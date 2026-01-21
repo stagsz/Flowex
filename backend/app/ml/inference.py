@@ -37,6 +37,8 @@ def download_model_from_supabase(
     Returns:
         True if download successful, False otherwise
     """
+    from urllib.parse import quote
+
     import httpx
 
     if not settings.SUPABASE_URL:
@@ -44,7 +46,9 @@ def download_model_from_supabase(
         return False
 
     # Try public URL first (faster, no auth needed)
-    public_url = f"{settings.SUPABASE_URL}/storage/v1/object/public/{bucket}/{remote_path}"
+    # URL encode the path to handle spaces and special characters
+    encoded_path = quote(remote_path, safe="")
+    public_url = f"{settings.SUPABASE_URL}/storage/v1/object/public/{bucket}/{encoded_path}"
     logger.info(f"Downloading model from: {public_url}")
 
     try:
