@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db, require_admin
 from app.core.rate_limiting import default_limit, limiter
-from app.models import Organization, User, UserRole
+from app.models import AuditAction, AuditLog, EntityType, Organization, User, UserRole
 from app.models.organization_invite import InviteStatus, OrganizationInvite
+from app.services.audit import log_action
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
@@ -106,6 +107,32 @@ class OrganizationUsageResponse(BaseModel):
     used_count: int
     remaining_count: int
     member_count: int
+
+
+class AuditLogResponse(BaseModel):
+    """Single audit log entry."""
+
+    id: str
+    user_id: str | None
+    user_email: str | None
+    user_name: str | None
+    action: str
+    entity_type: str | None
+    entity_id: str | None
+    ip_address: str | None
+    metadata: dict | None
+    timestamp: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AuditLogListResponse(BaseModel):
+    """Paginated list of audit log entries."""
+
+    items: list[AuditLogResponse]
+    total: int
+    page: int
+    page_size: int
 
 
 # =============================================================================
@@ -235,8 +262,28 @@ async def update_user_role(
             detail="User not found in this organization",
         )
 
+    # Capture old role for audit log
+    old_role = target_user.role.value
+
     # Update role
     target_user.role = body.role
+
+    # Log the action
+    log_action(
+        db=db,
+        user=current_user,
+        organization_id=organization_id,
+        action=AuditAction.USER_ROLE_UPDATE,
+        request=request,
+        entity_type=EntityType.USER,
+        entity_id=user_id,
+        metadata={
+            "target_user_email": target_user.email,
+            "old_role": old_role,
+            "new_role": body.role.value,
+        },
+    )
+
     db.commit()
     db.refresh(target_user)
 
@@ -288,6 +335,22 @@ async def remove_user(
 
     # Deactivate user (soft delete)
     target_user.is_active = False
+
+    # Log the action
+    log_action(
+        db=db,
+        user=current_user,
+        organization_id=organization_id,
+        action=AuditAction.USER_REMOVE,
+        request=request,
+        entity_type=EntityType.USER,
+        entity_id=user_id,
+        metadata={
+            "removed_user_email": target_user.email,
+            "removed_user_name": target_user.name,
+        },
+    )
+
     db.commit()
 
 
@@ -358,6 +421,23 @@ async def invite_user(
         invited_by_id=current_user.id,
     )
     db.add(invite)
+    db.flush()  # Get the invite ID
+
+    # Log the action
+    log_action(
+        db=db,
+        user=current_user,
+        organization_id=organization_id,
+        action=AuditAction.USER_INVITE,
+        request=request,
+        entity_type=EntityType.INVITE,
+        entity_id=invite.id,
+        metadata={
+            "invited_email": body.email,
+            "assigned_role": body.role.value,
+        },
+    )
+
     db.commit()
     db.refresh(invite)
 
@@ -458,6 +538,21 @@ async def revoke_invite(
         )
 
     invite.status = InviteStatus.REVOKED
+
+    # Log the action
+    log_action(
+        db=db,
+        user=current_user,
+        organization_id=organization_id,
+        action=AuditAction.INVITE_REVOKE,
+        request=request,
+        entity_type=EntityType.INVITE,
+        entity_id=invite_id,
+        metadata={
+            "revoked_email": invite.email,
+        },
+    )
+
     db.commit()
 
 
@@ -527,6 +622,21 @@ async def accept_invite(
     invite.status = InviteStatus.ACCEPTED
     invite.accepted_at = datetime.now(UTC)
 
+    # Log the action
+    log_action(
+        db=db,
+        user=current_user,
+        organization_id=invite.organization_id,
+        action=AuditAction.INVITE_ACCEPT,
+        request=request,
+        entity_type=EntityType.INVITE,
+        entity_id=invite.id,
+        metadata={
+            "accepted_email": current_user.email,
+            "assigned_role": invite.role.value,
+        },
+    )
+
     db.commit()
 
     return AcceptInviteResponse(
@@ -593,4 +703,91 @@ async def get_organization_usage(
         used_count=org.pids_used_this_month,
         remaining_count=max(0, org.monthly_pid_limit - org.pids_used_this_month),
         member_count=member_count,
+    )
+
+
+# =============================================================================
+# Audit Log Endpoints (Admin Only)
+# =============================================================================
+
+
+def _serialize_audit_log(log: AuditLog) -> AuditLogResponse:
+    """Serialize an audit log entry for API response."""
+    return AuditLogResponse(
+        id=str(log.id),
+        user_id=str(log.user_id) if log.user_id else None,
+        user_email=log.user.email if log.user else None,
+        user_name=log.user.name if log.user else None,
+        action=log.action.value,
+        entity_type=log.entity_type.value if log.entity_type else None,
+        entity_id=str(log.entity_id) if log.entity_id else None,
+        ip_address=log.ip_address,
+        metadata=log.extra_data,
+        timestamp=log.timestamp,
+    )
+
+
+@router.get("/{organization_id}/audit-logs", response_model=AuditLogListResponse)
+@limiter.limit(default_limit)
+async def list_audit_logs(
+    request: Request,
+    organization_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin)],
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    start_date: datetime | None = Query(None, description="Filter from date (inclusive)"),
+    end_date: datetime | None = Query(None, description="Filter to date (inclusive)"),
+    user_id: UUID | None = Query(None, description="Filter by user ID"),
+    action: AuditAction | None = Query(None, description="Filter by action type"),
+) -> AuditLogListResponse:
+    """List audit logs for the organization.
+
+    Admin only. Returns a paginated list of user activity logs.
+    Supports filtering by date range, user, and action type.
+
+    Query parameters:
+    - page: Page number (default: 1)
+    - page_size: Items per page (default: 50, max: 100)
+    - start_date: Filter logs from this date (ISO 8601 format)
+    - end_date: Filter logs until this date (ISO 8601 format)
+    - user_id: Filter by specific user
+    - action: Filter by action type (e.g., login, drawing_upload)
+    """
+    # Verify access to organization
+    if current_user.organization_id != organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied to this organization",
+        )
+
+    # Build query
+    query = db.query(AuditLog).filter(AuditLog.organization_id == organization_id)
+
+    # Apply filters
+    if start_date:
+        query = query.filter(AuditLog.timestamp >= start_date)
+    if end_date:
+        query = query.filter(AuditLog.timestamp <= end_date)
+    if user_id:
+        query = query.filter(AuditLog.user_id == user_id)
+    if action:
+        query = query.filter(AuditLog.action == action)
+
+    # Get total count
+    total = query.count()
+
+    # Get paginated results (most recent first)
+    logs = (
+        query.order_by(desc(AuditLog.timestamp))
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return AuditLogListResponse(
+        items=[_serialize_audit_log(log) for log in logs],
+        total=total,
+        page=page,
+        page_size=page_size,
     )

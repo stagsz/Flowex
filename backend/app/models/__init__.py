@@ -1,4 +1,5 @@
 # Database models
+from app.models.audit_log import AuditAction, AuditLog, EntityType
 from app.models.base import Base
 from app.models.beta_feedback import (
     BetaFeedback,
@@ -18,6 +19,9 @@ from app.models.user import SSOProvider, User, UserRole
 
 __all__ = [
     "Base",
+    "AuditLog",
+    "AuditAction",
+    "EntityType",
     "Organization",
     "SubscriptionTier",
     "OrganizationInvite",

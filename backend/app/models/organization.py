@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
+    from app.models.audit_log import AuditLog
     from app.models.beta_feedback import BetaFeedback
     from app.models.organization_invite import OrganizationInvite
     from app.models.project import Project
@@ -41,4 +42,7 @@ class Organization(Base, UUIDMixin, TimestampMixin):
     )
     invites: Mapped[list["OrganizationInvite"]] = relationship(
         "OrganizationInvite", back_populates="organization", cascade="all, delete-orphan"
+    )
+    audit_logs: Mapped[list["AuditLog"]] = relationship(
+        "AuditLog", back_populates="organization", cascade="all, delete-orphan"
     )

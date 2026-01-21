@@ -1,4 +1,5 @@
 # Business logic services
+from app.services.audit import log_action, log_action_background
 from app.services.drawings import (
     FileValidationError,
     create_drawing,
@@ -12,6 +13,8 @@ from app.services.drawings import (
 from app.services.storage import S3StorageService, StorageError, get_storage_service
 
 __all__ = [
+    "log_action",
+    "log_action_background",
     "S3StorageService",
     "StorageError",
     "get_storage_service",
