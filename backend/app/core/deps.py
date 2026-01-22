@@ -15,8 +15,8 @@ from app.models.organization import Organization
 
 logger = logging.getLogger(__name__)
 
-# Security scheme - auto_error=False allows bypass in dev mode
-security = HTTPBearer(auto_error=not (settings.DEBUG and settings.DEV_AUTH_BYPASS))
+# Security scheme - always auto_error=False so we control the response code (403 for missing credentials)
+security = HTTPBearer(auto_error=False)
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -162,9 +162,8 @@ async def get_current_user(
     # Normal auth flow
     if credentials is None:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
         )
 
     try:
