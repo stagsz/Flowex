@@ -92,7 +92,12 @@ function App() {
         console.error("Caught by Sentry ErrorBoundary:", error)
       }}
     >
-      <BrowserRouter>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
         <Suspense fallback={<PageLoadingFallback />}>
           <Routes>
             {/* Public routes */}
