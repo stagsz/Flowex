@@ -85,3 +85,6 @@ frontend/npm-output.txt
 /*.jpeg
 
 /settings.local.json
+
+# External cloned repos (should not be committed)
+tesseract/
