@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import UTC, datetime
 from io import BytesIO
-from typing import Any
+from typing import Any, Coroutine, TypeVar
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -21,6 +21,21 @@ from app.services.pdf_processing import (
 from app.services.storage import get_storage_service
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+
+def run_async(coro: Coroutine[Any, Any, T]) -> T:
+    """Run an async coroutine, handling both eager mode (inside event loop) and normal mode."""
+    try:
+        loop = asyncio.get_running_loop()
+        # We're inside an event loop (eager mode), use nest_asyncio or create task
+        import nest_asyncio
+        nest_asyncio.apply()
+        return asyncio.run(coro)
+    except RuntimeError:
+        # No event loop running (normal Celery worker), use asyncio.run
+        return asyncio.run(coro)
 
 
 def _map_class_to_category(class_name: str) -> SymbolCategory:
@@ -89,7 +104,7 @@ def process_drawing(self: Any, drawing_id: str) -> dict[str, Any]:
         # Download PDF from storage
         storage = get_storage_service()
         try:
-            pdf_bytes = asyncio.run(storage.download_file(drawing.storage_path))
+            pdf_bytes = run_async(storage.download_file(drawing.storage_path))
         except Exception as e:
             raise PDFProcessingError(f"Failed to download PDF: {e}") from e
 
@@ -127,7 +142,7 @@ def process_drawing(self: Any, drawing_id: str) -> dict[str, Any]:
         base_path = drawing.storage_path.rsplit("/", 1)[0]
         for i, img_bytes in enumerate(processed_images):
             img_path = f"{base_path}/processed/page_{i + 1}.png"
-            asyncio.run(storage.upload_file(BytesIO(img_bytes), img_path, "image/png"))
+            run_async(storage.upload_file(BytesIO(img_bytes), img_path, "image/png"))
 
         # Run AI inference on processed images
         logger.info(f"Running AI inference for drawing {drawing_id}")

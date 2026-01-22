@@ -18,8 +18,9 @@ if TYPE_CHECKING:
 
 
 class FileType(str, enum.Enum):
-    PDF_VECTOR = "pdf_vector"
-    PDF_SCANNED = "pdf_scanned"
+    # Names must match database enum values (lowercase)
+    pdf_vector = "pdf_vector"
+    pdf_scanned = "pdf_scanned"
 
 
 class DrawingStatus(str, enum.Enum):

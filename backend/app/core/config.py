@@ -298,9 +298,8 @@ class Settings(BaseSettings):
         return health
 
     model_config = SettingsConfigDict(
-        # Don't auto-load .env - use environment variables only
-        # For local dev, run: set -a && source .env && set +a
-        env_file=None,
+        # Load from .env file for local development
+        env_file=".env",
         case_sensitive=True,
         extra="ignore",  # Ignore extra env vars (e.g., RAILWAY_TOKEN from Railway CLI)
     )

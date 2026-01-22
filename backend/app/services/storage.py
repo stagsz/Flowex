@@ -233,11 +233,11 @@ class SupabaseStorageService(BaseStorageService):
             # Read file content
             file_content = file.read()
 
-            # Upload to Supabase Storage
+            # Upload to Supabase Storage with upsert to handle duplicates
             self.client.storage.from_(self.bucket).upload(
                 path=storage_path,
                 file=file_content,
-                file_options={"content-type": content_type},
+                file_options={"content-type": content_type, "upsert": "true"},
             )
 
             return storage_path
