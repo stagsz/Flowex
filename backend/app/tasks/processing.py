@@ -1,8 +1,9 @@
 import asyncio
 import logging
+from collections.abc import Coroutine
 from datetime import UTC, datetime
 from io import BytesIO
-from typing import Any, Coroutine, TypeVar
+from typing import Any, TypeVar
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -28,9 +29,10 @@ T = TypeVar("T")
 def run_async(coro: Coroutine[Any, Any, T]) -> T:
     """Run an async coroutine, handling both eager mode (inside event loop) and normal mode."""
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
         # We're inside an event loop (eager mode), use nest_asyncio or create task
-        import nest_asyncio
+        import nest_asyncio  # type: ignore[import-untyped]
+
         nest_asyncio.apply()
         return asyncio.run(coro)
     except RuntimeError:
@@ -65,7 +67,7 @@ def _map_class_to_category(class_name: str) -> SymbolCategory:
     return SymbolCategory.OTHER
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)  # type: ignore[untyped-decorator]
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)  # type: ignore[misc]
 def process_drawing(self: Any, drawing_id: str) -> dict[str, Any]:
     """
     Process an uploaded PDF drawing.
@@ -249,7 +251,7 @@ def process_drawing(self: Any, drawing_id: str) -> dict[str, Any]:
         db.close()
 
 
-@celery_app.task  # type: ignore[untyped-decorator]
+@celery_app.task  # type: ignore[misc]
 def check_processing_health() -> dict[str, str]:
     """Health check task to verify Celery is working."""
     return {"status": "healthy", "worker": "celery"}
