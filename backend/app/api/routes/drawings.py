@@ -247,6 +247,63 @@ async def delete_drawing(
     await drawing_service.delete_drawing(db, drawing)
 
 
+class CancelResponse(BaseModel):
+    """Response for cancel operation."""
+
+    drawing_id: str
+    status: str
+    message: str
+
+
+@router.delete("/{drawing_id}/cancel", response_model=CancelResponse)
+async def cancel_upload(
+    drawing_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> CancelResponse:
+    """
+    Cancel an in-progress upload and cleanup resources.
+
+    This endpoint is called when a user cancels an upload mid-flight.
+    It deletes the partially uploaded file from storage and removes
+    the drawing record from the database.
+
+    Can only cancel drawings in 'uploaded' or 'processing' status.
+    """
+    drawing = await drawing_service.get_drawing(db, drawing_id)
+    if not drawing:
+        # Drawing doesn't exist - possibly already cleaned up or never created
+        # Return success to be idempotent for the frontend
+        return CancelResponse(
+            drawing_id=str(drawing_id),
+            status="not_found",
+            message="Drawing not found (may have already been cancelled)",
+        )
+
+    # Check project access
+    project = db.query(Project).filter(Project.id == drawing.project_id).first()
+    if not project or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Only allow cancellation of uploads that are in progress or just uploaded
+    cancellable_statuses = [DrawingStatus.uploaded, DrawingStatus.processing]
+    if drawing.status not in cancellable_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel drawing with status '{drawing.status.value}'. "
+            f"Only drawings with status 'uploaded' or 'processing' can be cancelled.",
+        )
+
+    # Delete the drawing (this also cleans up the file in storage)
+    await drawing_service.delete_drawing(db, drawing)
+
+    return CancelResponse(
+        drawing_id=str(drawing_id),
+        status="cancelled",
+        message="Upload cancelled and resources cleaned up",
+    )
+
+
 class ProcessingResponse(BaseModel):
     drawing_id: str
     task_id: str

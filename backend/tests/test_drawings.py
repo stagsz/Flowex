@@ -716,3 +716,70 @@ class TestLinesEndpointAuth:
             json={"line_number": "L-001"},
         )
         assert response.status_code == 403
+
+
+class TestCancelUpload:
+    """Tests for upload cancellation functionality."""
+
+    def test_cancel_requires_auth(self):
+        """Test cancel endpoint requires authentication."""
+        drawing_id = str(uuid4())
+        response = client.delete(f"/api/v1/drawings/{drawing_id}/cancel")
+        # Should return 403 (Forbidden) without auth
+        assert response.status_code == 403
+
+    def test_cancel_invalid_uuid_requires_auth(self):
+        """Test cancel with invalid UUID still requires auth first."""
+        response = client.delete("/api/v1/drawings/invalid-uuid/cancel")
+        # Auth check happens before UUID validation, so returns 403
+        assert response.status_code == 403
+
+    def test_cancel_response_model(self):
+        """Test CancelResponse model structure."""
+        from app.api.routes.drawings import CancelResponse
+
+        response = CancelResponse(
+            drawing_id="abc-123",
+            status="cancelled",
+            message="Upload cancelled and resources cleaned up",
+        )
+        assert response.drawing_id == "abc-123"
+        assert response.status == "cancelled"
+        assert "cancelled" in response.message.lower()
+
+    def test_cancel_response_not_found(self):
+        """Test CancelResponse for not found case."""
+        from app.api.routes.drawings import CancelResponse
+
+        response = CancelResponse(
+            drawing_id="abc-123",
+            status="not_found",
+            message="Drawing not found (may have already been cancelled)",
+        )
+        assert response.status == "not_found"
+
+    def test_cancel_response_json_serialization(self):
+        """Test CancelResponse serializes to JSON correctly."""
+        from app.api.routes.drawings import CancelResponse
+
+        response = CancelResponse(
+            drawing_id="abc-123",
+            status="cancelled",
+            message="Test message",
+        )
+        json_data = response.model_dump()
+        assert "drawing_id" in json_data
+        assert "status" in json_data
+        assert "message" in json_data
+        assert json_data["drawing_id"] == "abc-123"
+
+
+class TestCancelUploadIntegration:
+    """Integration tests for cancel upload functionality."""
+
+    def test_cancel_not_found_drawing_requires_auth(self):
+        """Test cancelling a non-existent drawing requires auth."""
+        fake_id = str(uuid4())
+        response = client.delete(f"/api/v1/drawings/{fake_id}/cancel")
+        # Auth required before we can check if drawing exists
+        assert response.status_code == 403

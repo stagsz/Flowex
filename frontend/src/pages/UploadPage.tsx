@@ -18,6 +18,8 @@ import {
   AlertCircle,
   File,
   Plus,
+  Loader2,
+  Ban,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
@@ -26,9 +28,10 @@ interface UploadFile {
   id: string
   file: File
   progress: number
-  status: "pending" | "uploading" | "completed" | "failed"
+  status: "pending" | "uploading" | "completed" | "failed" | "cancelled"
   error?: string
   drawingId?: string
+  abortController?: AbortController
 }
 
 interface Project {
@@ -156,6 +159,32 @@ export function UploadPage() {
     setFiles((prev) => prev.filter((f) => f.id !== id))
   }
 
+  const cancelUpload = async (uploadFile: UploadFile) => {
+    // Abort the ongoing fetch request
+    if (uploadFile.abortController) {
+      uploadFile.abortController.abort()
+    }
+
+    // Update status to cancelled
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.id === uploadFile.id
+          ? { ...f, status: "cancelled", error: "Upload cancelled" }
+          : f
+      )
+    )
+
+    // If a drawing was partially created, clean it up on the backend
+    if (uploadFile.drawingId) {
+      try {
+        await api.delete(`/api/v1/drawings/${uploadFile.drawingId}/cancel`)
+      } catch {
+        // Cleanup failed, but user already cancelled - just log it
+        console.warn("Failed to cleanup cancelled upload:", uploadFile.drawingId)
+      }
+    }
+  }
+
   const uploadFiles = async () => {
     if (!selectedProject) {
       alert("Please select a project")
@@ -165,9 +194,14 @@ export function UploadPage() {
     for (const uploadFile of files) {
       if (uploadFile.status !== "pending") continue
 
+      // Create AbortController for this upload
+      const abortController = new AbortController()
+
       setFiles((prev) =>
         prev.map((f) =>
-          f.id === uploadFile.id ? { ...f, status: "uploading", progress: 10 } : f
+          f.id === uploadFile.id
+            ? { ...f, status: "uploading", progress: 10, abortController }
+            : f
         )
       )
 
@@ -179,7 +213,8 @@ export function UploadPage() {
         // Upload to backend API (uses authenticated fetch)
         const response = await api.post(
           `/api/v1/drawings/upload/${selectedProject}`,
-          formData
+          formData,
+          { signal: abortController.signal }
         )
 
         setFiles((prev) =>
@@ -193,7 +228,7 @@ export function UploadPage() {
           setFiles((prev) =>
             prev.map((f) =>
               f.id === uploadFile.id
-                ? { ...f, status: "completed", progress: 100, drawingId: data.id }
+                ? { ...f, status: "completed", progress: 100, drawingId: data.id, abortController: undefined }
                 : f
             )
           )
@@ -202,19 +237,31 @@ export function UploadPage() {
           setFiles((prev) =>
             prev.map((f) =>
               f.id === uploadFile.id
-                ? { ...f, status: "failed", error: errorData.detail || "Upload failed" }
+                ? { ...f, status: "failed", error: errorData.detail || "Upload failed", abortController: undefined }
                 : f
             )
           )
         }
       } catch (error) {
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.id === uploadFile.id
-              ? { ...f, status: "failed", error: "Network error - is the backend running?" }
-              : f
+        // Check if this was an abort (cancellation)
+        if (error instanceof Error && error.name === "AbortError") {
+          // Already handled by cancelUpload, just ensure state is correct
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === uploadFile.id && f.status === "uploading"
+                ? { ...f, status: "cancelled", error: "Upload cancelled", abortController: undefined }
+                : f
+            )
           )
-        )
+        } else {
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === uploadFile.id
+                ? { ...f, status: "failed", error: "Network error - is the backend running?", abortController: undefined }
+                : f
+            )
+          )
+        }
       }
     }
   }
@@ -355,18 +402,35 @@ export function UploadPage() {
                       </p>
                     )}
                   </div>
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 flex items-center gap-1">
                     {uploadFile.status === "completed" && (
                       <CheckCircle className="h-5 w-5 text-green-500" />
                     )}
                     {uploadFile.status === "failed" && (
                       <AlertCircle className="h-5 w-5 text-red-500" />
                     )}
+                    {uploadFile.status === "cancelled" && (
+                      <Ban className="h-5 w-5 text-muted-foreground" />
+                    )}
+                    {uploadFile.status === "uploading" && (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => cancelUpload(uploadFile)}
+                          title="Cancel upload"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </>
+                    )}
                     {uploadFile.status === "pending" && (
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => removeFile(uploadFile.id)}
+                        title="Remove file"
                       >
                         <X className="h-4 w-4" />
                       </Button>
