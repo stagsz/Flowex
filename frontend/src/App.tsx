@@ -13,6 +13,7 @@ const DrawingsPage = lazy(() => import("@/pages/DrawingsPage").then(m => ({ defa
 const UploadPage = lazy(() => import("@/pages/UploadPage").then(m => ({ default: m.UploadPage })))
 const ValidationPage = lazy(() => import("@/pages/ValidationPage").then(m => ({ default: m.ValidationPage })))
 const SettingsIntegrationsPage = lazy(() => import("@/pages/SettingsIntegrationsPage").then(m => ({ default: m.SettingsIntegrationsPage })))
+const BetaAdminPage = lazy(() => import("@/pages/BetaAdminPage").then(m => ({ default: m.BetaAdminPage })))
 
 function PageLoadingFallback() {
   return (
@@ -112,6 +113,7 @@ function App() {
               <Route path="/drawings/:drawingId/validate" element={<ValidationPage />} />
               <Route path="/upload" element={<UploadPage />} />
               <Route path="/settings/integrations" element={<SettingsIntegrationsPage />} />
+              <Route path="/admin/beta" element={<BetaAdminPage />} />
             </Route>
 
             {/* Redirects */}
