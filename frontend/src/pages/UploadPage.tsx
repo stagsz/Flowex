@@ -252,7 +252,7 @@ export function UploadPage() {
             } else {
               // Processing failed to start, but upload succeeded
               const errorData = await processResponse.json().catch(() => ({}))
-              console.warn("Failed to start processing:", errorData)
+              console.warn("Failed to start processing:", processResponse.status, errorData?.detail || JSON.stringify(errorData))
               // Still mark as completed since file was uploaded
               setFiles((prev) =>
                 prev.map((f) =>

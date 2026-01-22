@@ -336,14 +336,23 @@ async def start_processing(
     # Queue the processing task
     from app.tasks.processing import process_drawing
 
-    task = process_drawing.delay(str(drawing_id))
-
-    return ProcessingResponse(
-        drawing_id=str(drawing_id),
-        task_id=task.id,
-        status="queued",
-        message="Processing task has been queued",
-    )
+    try:
+        task = process_drawing.delay(str(drawing_id))
+        return ProcessingResponse(
+            drawing_id=str(drawing_id),
+            task_id=task.id,
+            status="queued",
+            message="Processing task has been queued",
+        )
+    except Exception as e:
+        # Redis/Celery connection failed - log and return error
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to queue processing task: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Processing service unavailable. Please try again later. Error: {str(e)}"
+        )
 
 
 @router.get("/{drawing_id}/process/status")
