@@ -28,7 +28,7 @@ interface UploadFile {
   id: string
   file: File
   progress: number
-  status: "pending" | "uploading" | "completed" | "failed" | "cancelled"
+  status: "pending" | "uploading" | "processing" | "completed" | "failed" | "cancelled"
   error?: string
   drawingId?: string
   abortController?: AbortController
@@ -225,13 +225,54 @@ export function UploadPage() {
 
         if (response.ok) {
           const data = await response.json()
+          const drawingId = data.id
+
+          // Update status to show upload complete, now processing
           setFiles((prev) =>
             prev.map((f) =>
               f.id === uploadFile.id
-                ? { ...f, status: "completed", progress: 100, drawingId: data.id, abortController: undefined }
+                ? { ...f, status: "processing", progress: 100, drawingId, abortController: undefined }
                 : f
             )
           )
+
+          // Trigger ML processing
+          try {
+            const processResponse = await api.post(`/api/v1/drawings/${drawingId}/process`)
+            if (processResponse.ok) {
+              // Processing started successfully - mark as completed
+              // The actual ML runs in the background via Celery
+              setFiles((prev) =>
+                prev.map((f) =>
+                  f.id === uploadFile.id
+                    ? { ...f, status: "completed" }
+                    : f
+                )
+              )
+            } else {
+              // Processing failed to start, but upload succeeded
+              const errorData = await processResponse.json().catch(() => ({}))
+              console.warn("Failed to start processing:", errorData)
+              // Still mark as completed since file was uploaded
+              setFiles((prev) =>
+                prev.map((f) =>
+                  f.id === uploadFile.id
+                    ? { ...f, status: "completed" }
+                    : f
+                )
+              )
+            }
+          } catch (processError) {
+            console.warn("Failed to trigger processing:", processError)
+            // Still mark as completed since file was uploaded
+            setFiles((prev) =>
+              prev.map((f) =>
+                f.id === uploadFile.id
+                  ? { ...f, status: "completed" }
+                  : f
+              )
+            )
+          }
         } else {
           const errorData = await response.json().catch(() => ({ detail: "Upload failed" }))
           setFiles((prev) =>
@@ -266,7 +307,7 @@ export function UploadPage() {
     }
   }
 
-  const allCompleted = files.length > 0 && files.every((f) => f.status === "completed")
+  const allCompleted = files.length > 0 && files.every((f) => f.status === "completed" || f.status === "processing")
   const hasFiles = files.length > 0
   const pendingFiles = files.filter((f) => f.status === "pending").length
 
@@ -405,6 +446,12 @@ export function UploadPage() {
                   <div className="flex-shrink-0 flex items-center gap-1">
                     {uploadFile.status === "completed" && (
                       <CheckCircle className="h-5 w-5 text-green-500" />
+                    )}
+                    {uploadFile.status === "processing" && (
+                      <span className="flex items-center gap-1 text-sm text-blue-500">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Processing
+                      </span>
                     )}
                     {uploadFile.status === "failed" && (
                       <AlertCircle className="h-5 w-5 text-red-500" />
