@@ -22,7 +22,7 @@ def _get_redis_url() -> str | None:
     try:
         import redis
 
-        r = redis.from_url(settings.REDIS_URL)  # type: ignore[no-untyped-call]
+        r = redis.from_url(settings.REDIS_URL)
         r.ping()
         return settings.REDIS_URL
     except Exception:

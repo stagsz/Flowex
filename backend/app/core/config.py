@@ -108,6 +108,10 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # Celery Configuration
+    # Set to True to run tasks synchronously without Redis/Celery worker (dev mode)
+    CELERY_TASK_ALWAYS_EAGER: bool = False
+
     # CORS - include production URLs by default
     CORS_ORIGINS: list[str] = [
         "http://localhost:5173",
@@ -273,7 +277,7 @@ class Settings(BaseSettings):
         # Check Redis connection
         try:
             import redis
-            r = redis.from_url(self.REDIS_URL)  # type: ignore[no-untyped-call]
+            r = redis.from_url(self.REDIS_URL)
             r.ping()
             health["checks"]["redis"] = {"status": "healthy"}
         except Exception as e:

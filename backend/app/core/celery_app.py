@@ -22,3 +22,11 @@ celery_app.conf.update(
     task_acks_late=True,  # Acknowledge after task completes
     task_reject_on_worker_lost=True,
 )
+
+# Dev mode: run tasks synchronously without Redis/Celery worker
+# Set CELERY_TASK_ALWAYS_EAGER=true in .env to enable
+if settings.CELERY_TASK_ALWAYS_EAGER:
+    celery_app.conf.update(
+        task_always_eager=True,
+        task_eager_propagates=True,
+    )
