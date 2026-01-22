@@ -676,6 +676,11 @@ _None_
   - Remove unused loop variable in run_async() helper
   - All validation passes: mypy 0 errors, ruff clean, 322 tests pass
 
+- [x] **Add tesseract/ to .gitignore** - `e638f1b`
+  - The tesseract-ocr repository was accidentally cloned inside the project root
+  - Tesseract should be installed as a system dependency, not bundled in repo
+  - Added tesseract/ to .gitignore to prevent accidental commits
+
 ---
 
 ## Technical Decisions
