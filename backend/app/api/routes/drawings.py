@@ -338,20 +338,30 @@ async def start_processing(
 
     try:
         task = process_drawing.delay(str(drawing_id))
+        # In eager mode, task.id might be None and task already ran
+        task_id = task.id if task.id else "eager-mode"
         return ProcessingResponse(
             drawing_id=str(drawing_id),
-            task_id=task.id,
+            task_id=task_id,
             status="queued",
             message="Processing task has been queued",
         )
     except Exception as e:
-        # Redis/Celery connection failed - log and return error
+        # Task failed - log full traceback and return error
         import logging
+        import traceback
         logger = logging.getLogger(__name__)
-        logger.error(f"Failed to queue processing task: {e}")
+        logger.error(f"Failed to process drawing: {e}\n{traceback.format_exc()}")
+
+        # Update drawing status to error
+        if drawing:
+            drawing.status = DrawingStatus.error
+            drawing.error_message = str(e)[:500]  # Truncate long errors
+            db.commit()
+
         raise HTTPException(
-            status_code=503,
-            detail=f"Processing service unavailable. Please try again later. Error: {str(e)}"
+            status_code=500,
+            detail=f"Processing failed: {str(e)}"
         )
 
 
