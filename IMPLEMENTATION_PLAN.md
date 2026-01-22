@@ -666,6 +666,16 @@ _None_
   - Affected files: config.py, oauth_state.py, rate_limiting.py, cloud.py, processing.py, celery_app.py
   - Mypy now passes with 0 errors (checked 56 source files)
 
+- [x] **Fix mypy type ignores for redis and Celery (environment mismatch)** - `1a02642`
+  - Added `# type: ignore[no-untyped-call]` back to redis.from_url() calls
+    (type stubs vary by environment and redis library version)
+  - Changed Celery task decorator ignores from `[untyped-decorator]` to `[misc]`
+    (mypy reports decorator errors with misc code in this environment)
+  - Import Coroutine from collections.abc instead of typing (Python 3.11+ standard)
+  - Add type ignore for nest_asyncio import (missing stubs)
+  - Remove unused loop variable in run_async() helper
+  - All validation passes: mypy 0 errors, ruff clean, 322 tests pass
+
 ---
 
 ## Technical Decisions
