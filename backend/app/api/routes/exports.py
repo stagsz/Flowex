@@ -962,8 +962,8 @@ async def _process_batch_export(
                         project_name=project.name if project else "Unknown",
                     )
 
-                    service = DXFExportService()
-                    export_path = service.export_drawing(
+                    dxf_service = DXFExportService()
+                    export_path = dxf_service.export_drawing(
                         drawing, symbols, lines, text_annotations, options, title_info
                     )
                     exported_files[f"{drawing_name}.dxf"] = export_path
@@ -972,13 +972,13 @@ async def _process_batch_export(
                     # Data lists export
                     export_format = ExportFormat(request.format)
                     metadata = _create_export_metadata(drawing, db)
-                    service = DataListExportService()
+                    list_service = DataListExportService()
 
                     list_files: dict[str, Path] = {}
                     for list_type in request.lists:
                         try:
                             if list_type == "equipment":
-                                path = service.export_equipment_list(
+                                path = list_service.export_equipment_list(
                                     drawing,
                                     symbols,
                                     metadata,
@@ -986,7 +986,7 @@ async def _process_batch_export(
                                     request.include_unverified,
                                 )
                             elif list_type == "line":
-                                path = service.export_line_list(
+                                path = list_service.export_line_list(
                                     drawing,
                                     lines,
                                     metadata,
@@ -994,7 +994,7 @@ async def _process_batch_export(
                                     request.include_unverified,
                                 )
                             elif list_type == "instrument":
-                                path = service.export_instrument_list(
+                                path = list_service.export_instrument_list(
                                     drawing,
                                     symbols,
                                     metadata,
@@ -1002,7 +1002,7 @@ async def _process_batch_export(
                                     request.include_unverified,
                                 )
                             elif list_type == "valve":
-                                path = service.export_valve_list(
+                                path = list_service.export_valve_list(
                                     drawing,
                                     symbols,
                                     metadata,
@@ -1010,7 +1010,7 @@ async def _process_batch_export(
                                     request.include_unverified,
                                 )
                             elif list_type == "mto":
-                                path = service.export_mto(
+                                path = list_service.export_mto(
                                     drawing,
                                     symbols,
                                     lines,
@@ -1042,8 +1042,8 @@ async def _process_batch_export(
                     # Validation checklist export
                     export_format = ExportFormat(request.format)
                     metadata = _create_export_metadata(drawing, db)
-                    service = DataListExportService()
-                    export_path = service.export_validation_checklist(
+                    checklist_service = DataListExportService()
+                    export_path = checklist_service.export_validation_checklist(
                         drawing,
                         symbols,
                         lines,

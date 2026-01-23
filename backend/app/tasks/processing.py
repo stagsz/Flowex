@@ -67,7 +67,7 @@ def _map_class_to_category(class_name: str) -> SymbolCategory:
     return SymbolCategory.OTHER
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)  # type: ignore[misc]
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)  # type: ignore[untyped-decorator]
 def process_drawing(self: Any, drawing_id: str) -> dict[str, Any]:
     """
     Process an uploaded PDF drawing.
@@ -251,7 +251,7 @@ def process_drawing(self: Any, drawing_id: str) -> dict[str, Any]:
         db.close()
 
 
-@celery_app.task  # type: ignore[misc]
+@celery_app.task  # type: ignore[untyped-decorator]
 def check_processing_health() -> dict[str, str]:
     """Health check task to verify Celery is working."""
     return {"status": "healthy", "worker": "celery"}
