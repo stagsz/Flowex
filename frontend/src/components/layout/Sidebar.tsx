@@ -10,6 +10,7 @@ import {
   HelpCircle,
   Shield,
   ScrollText,
+  Users,
 } from "lucide-react"
 
 const navigation = [
@@ -25,6 +26,7 @@ const secondaryNavigation = [
 ]
 
 const adminNavigation = [
+  { name: "Team Members", href: "/admin/members", icon: Users },
   { name: "Beta Admin", href: "/admin/beta", icon: Shield },
   { name: "Audit Logs", href: "/admin/audit-logs", icon: ScrollText },
 ]
