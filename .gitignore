@@ -21,7 +21,7 @@ out/
 .env.local
 .env.*.local
 .env.railway
-.env.production
+# Note: .env.production is committed for Vercel builds (contains only public keys)
 *.local
 
 # IDE
