@@ -28,6 +28,9 @@ import {
   MoreVertical,
   Loader2,
   Pencil,
+  Archive,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -64,6 +67,11 @@ export function ProjectsPage() {
   const [editProjectDescription, setEditProjectDescription] = useState("")
   const [isUpdating, setIsUpdating] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
+
+  // Delete confirmation state
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Fetch projects from API
   useEffect(() => {
@@ -143,11 +151,36 @@ export function ProjectsPage() {
     }
   }
 
-  const deleteProject = async (projectId: string) => {
+  const openDeleteDialog = (project: Project) => {
+    setProjectToDelete(project)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!projectToDelete || isDeleting) return
+
+    setIsDeleting(true)
     try {
-      const response = await api.delete(`/api/v1/projects/${projectId}`)
+      const response = await api.delete(`/api/v1/projects/${projectToDelete.id}`)
       if (response.ok) {
-        setProjects((prev) => prev.filter((p) => p.id !== projectId))
+        setProjects((prev) => prev.filter((p) => p.id !== projectToDelete.id))
+        setIsDeleteDialogOpen(false)
+        setProjectToDelete(null)
+      }
+    } catch {
+      // Handle error silently
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const archiveProject = async (project: Project) => {
+    try {
+      const response = await api.patch(`/api/v1/projects/${project.id}`, {
+        is_archived: true,
+      })
+      if (response.ok) {
+        setProjects((prev) => prev.filter((p) => p.id !== project.id))
       }
     } catch {
       // Handle error silently
@@ -356,10 +389,15 @@ export function ProjectsPage() {
                       <Pencil className="mr-2 h-4 w-4" />
                       Edit
                     </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => archiveProject(project)}>
+                      <Archive className="mr-2 h-4 w-4" />
+                      Archive
+                    </DropdownMenuItem>
                     <DropdownMenuItem
                       className="text-destructive"
-                      onClick={() => deleteProject(project.id)}
+                      onClick={() => openDeleteDialog(project)}
                     >
+                      <Trash2 className="mr-2 h-4 w-4" />
                       Delete
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -438,6 +476,66 @@ export function ProjectsPage() {
                 </>
               ) : (
                 "Save Changes"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!isDeleting) {
+            setIsDeleteDialogOpen(open)
+            if (!open) {
+              setProjectToDelete(null)
+            }
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Delete Project
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{projectToDelete?.name}</strong>?
+              {projectToDelete && projectToDelete.drawingCount > 0 && (
+                <span className="block mt-2 text-destructive">
+                  This project contains {projectToDelete.drawingCount} drawing{projectToDelete.drawingCount !== 1 ? "s" : ""}.
+                  All drawings will be deleted.
+                </span>
+              )}
+              <span className="block mt-2">
+                This action cannot be undone. Consider archiving instead if you might need this project later.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Project
+                </>
               )}
             </Button>
           </DialogFooter>
