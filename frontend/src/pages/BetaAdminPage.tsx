@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Navigate } from "react-router-dom"
 import {
   Card,
@@ -106,12 +106,10 @@ export function BetaAdminPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [updatingId, setUpdatingId] = useState<string | null>(null)
 
-  // Only admins can access this page
-  if (user && user.role !== "admin" && user.role !== "owner") {
-    return <Navigate to="/dashboard" replace />
-  }
+  // Check if user has admin access
+  const isAdmin = user && (user.role === "admin" || user.role === "owner")
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true)
     setError(null)
 
@@ -139,11 +137,18 @@ export function BetaAdminPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [typeFilter, statusFilter])
 
   useEffect(() => {
+    // Only fetch data if user is an admin
+    if (!isAdmin) return
     fetchData()
-  }, [typeFilter, statusFilter])
+  }, [isAdmin, fetchData])
+
+  // Only admins can access this page - return after hooks are called
+  if (!isAdmin) {
+    return <Navigate to="/dashboard" replace />
+  }
 
   const updateFeedbackStatus = async (feedbackId: string, newStatus: string) => {
     setUpdatingId(feedbackId)

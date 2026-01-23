@@ -100,7 +100,7 @@ async def _get_cloud_file_info(
         return files
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)  # type: ignore[untyped-decorator]
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)  # type: ignore[misc]
 def import_from_cloud(
     self: Any,
     connection_id: str,
@@ -199,7 +199,7 @@ def import_from_cloud(
         db.close()
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)  # type: ignore[untyped-decorator]
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)  # type: ignore[misc]
 def export_to_cloud(
     self: Any,
     connection_id: str,

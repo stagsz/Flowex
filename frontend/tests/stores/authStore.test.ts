@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import type { Session, User as SupabaseUser, AuthError } from '@supabase/supabase-js'
+import type { Session, User as SupabaseUser } from '@supabase/supabase-js'
 
 // Use vi.hoisted to ensure mocks are defined before module imports
 const { mockGetSession, mockSignInWithOAuth, mockSignOut, mockOnAuthStateChange } = vi.hoisted(() => ({
