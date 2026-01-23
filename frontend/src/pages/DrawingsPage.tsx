@@ -19,6 +19,9 @@ import {
   Download,
   MoreVertical,
   Loader2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -26,6 +29,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
 import { ExportDialog } from "@/components/export/ExportDialog"
@@ -41,12 +51,16 @@ interface Drawing {
   processedAt?: string
 }
 
+type SortField = "name" | "date" | "status"
+
 export function DrawingsPage() {
   const [searchParams] = useSearchParams()
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState(
     searchParams.get("status") || "all"
   )
+  const [sortBy, setSortBy] = useState<SortField>("date")
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
   const [drawings, setDrawings] = useState<Drawing[]>([])
   const [loading, setLoading] = useState(true)
   const [exportDrawing, setExportDrawing] = useState<Drawing | null>(null)
@@ -134,14 +148,42 @@ export function DrawingsPage() {
     },
   }
 
-  const filteredDrawings = drawings.filter((drawing) => {
-    const matchesSearch =
-      drawing.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      drawing.projectName.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesStatus =
-      statusFilter === "all" || drawing.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
+  // Status order for sorting: uploaded -> processing -> review -> complete -> error
+  const statusOrder: Record<Drawing["status"], number> = {
+    uploaded: 0,
+    processing: 1,
+    review: 2,
+    complete: 3,
+    error: 4,
+  }
+
+  const filteredDrawings = drawings
+    .filter((drawing) => {
+      const matchesSearch =
+        drawing.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        drawing.projectName.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchesStatus =
+        statusFilter === "all" || drawing.status === statusFilter
+      return matchesSearch && matchesStatus
+    })
+    .sort((a, b) => {
+      let comparison = 0
+      switch (sortBy) {
+        case "name":
+          comparison = a.name.localeCompare(b.name)
+          break
+        case "date":
+          // Sort by processedAt first, then createdAt
+          const dateA = a.processedAt || a.createdAt
+          const dateB = b.processedAt || b.createdAt
+          comparison = dateA.localeCompare(dateB)
+          break
+        case "status":
+          comparison = statusOrder[a.status] - statusOrder[b.status]
+          break
+      }
+      return sortDirection === "asc" ? comparison : -comparison
+    })
 
   return (
     <div className="space-y-6">
@@ -170,21 +212,52 @@ export function DrawingsPage() {
             className="pl-9"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <div className="flex gap-1">
-            {["all", "uploaded", "processing", "review", "complete", "error"].map(
-              (status) => (
-                <Button
-                  key={status}
-                  variant={statusFilter === status ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={() => setStatusFilter(status)}
-                >
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </Button>
-              )
-            )}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <div className="flex gap-1">
+              {["all", "uploaded", "processing", "review", "complete", "error"].map(
+                (status) => (
+                  <Button
+                    key={status}
+                    variant={statusFilter === status ? "secondary" : "ghost"}
+                    size="sm"
+                    onClick={() => setStatusFilter(status)}
+                  >
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                  </Button>
+                )
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+            <Select
+              value={sortBy}
+              onValueChange={(value: SortField) => setSortBy(value)}
+            >
+              <SelectTrigger className="h-8 w-[100px]">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="name">Name</SelectItem>
+                <SelectItem value="date">Date</SelectItem>
+                <SelectItem value="status">Status</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setSortDirection(d => d === "asc" ? "desc" : "asc")}
+              title={sortDirection === "asc" ? "Sort ascending" : "Sort descending"}
+            >
+              {sortDirection === "asc" ? (
+                <ArrowUp className="h-4 w-4" />
+              ) : (
+                <ArrowDown className="h-4 w-4" />
+              )}
+            </Button>
           </div>
         </div>
       </div>
