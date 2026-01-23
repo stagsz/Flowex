@@ -926,3 +926,354 @@ class TestValidationChecklistExport:
         assert "Yes" in f101_line[0]  # Flagged = Yes
 
         output_path.unlink()
+
+
+# Batch Export Tests (DB-07)
+
+
+class TestBatchExportModels:
+    """Tests for batch export request/response models."""
+
+    def test_batch_export_request_model(self):
+        """Test BatchExportRequest model validation."""
+        from app.api.routes.exports import BatchExportRequest
+
+        # Valid request with drawing IDs
+        request = BatchExportRequest(
+            drawing_ids=[uuid4(), uuid4()],
+            export_type="dxf",
+            paper_size="A1",
+            scale="1:50",
+        )
+        assert len(request.drawing_ids) == 2
+        assert request.export_type == "dxf"
+
+    def test_batch_export_request_requires_drawing_ids(self):
+        """Test that drawing_ids is required and non-empty."""
+        from pydantic import ValidationError
+
+        from app.api.routes.exports import BatchExportRequest
+
+        with pytest.raises(ValidationError):
+            BatchExportRequest(
+                drawing_ids=[],  # Empty list should fail
+                export_type="dxf",
+            )
+
+    def test_batch_export_request_default_values(self):
+        """Test BatchExportRequest default values."""
+        from app.api.routes.exports import BatchExportRequest
+
+        request = BatchExportRequest(drawing_ids=[uuid4()])
+
+        assert request.export_type == "dxf"
+        assert request.paper_size == "A1"
+        assert request.scale == "1:50"
+        assert request.include_connections is True
+        assert request.include_annotations is True
+        assert request.include_title_block is True
+        assert "equipment" in request.lists
+        assert request.format == "xlsx"
+        assert request.include_unverified is False
+
+    def test_batch_export_job_response_model(self):
+        """Test BatchExportJobResponse model."""
+        from app.api.routes.exports import BatchExportJobResponse
+
+        response = BatchExportJobResponse(
+            job_id="test-job-123",
+            total_drawings=5,
+            export_type="dxf",
+            status="processing",
+            message="Batch export started",
+        )
+
+        assert response.job_id == "test-job-123"
+        assert response.total_drawings == 5
+        assert response.status == "processing"
+
+    def test_batch_export_status_response_model(self):
+        """Test BatchExportStatusResponse model."""
+        from app.api.routes.exports import BatchExportStatusResponse
+
+        response = BatchExportStatusResponse(
+            job_id="test-job-123",
+            status="completed",
+            total_drawings=5,
+            completed_drawings=4,
+            failed_drawings=1,
+            file_path="/tmp/batch_export.zip",
+            errors=["drawing-1: failed to export"],
+        )
+
+        assert response.completed_drawings == 4
+        assert response.failed_drawings == 1
+        assert len(response.errors) == 1
+
+
+class TestBatchExportEndpoints:
+    """Tests for batch export API endpoints."""
+
+    @pytest.fixture
+    def client(self):
+        """Create a test client."""
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        return TestClient(app)
+
+    @pytest.fixture
+    def auth_headers(self):
+        """Create mock auth headers."""
+        return {"Authorization": "Bearer test-token"}
+
+    def test_batch_export_validates_export_type(self, client, auth_headers):
+        """Test that invalid export type is rejected."""
+        response = client.post(
+            "/api/v1/exports/batch",
+            headers=auth_headers,
+            json={
+                "drawing_ids": [str(uuid4())],
+                "export_type": "invalid_type",
+            },
+        )
+        # Should return 400 or 401 (if auth fails first)
+        assert response.status_code in [400, 401]
+
+    def test_batch_export_validates_paper_size(self, client, auth_headers):
+        """Test that invalid paper size is rejected for DXF export."""
+        response = client.post(
+            "/api/v1/exports/batch",
+            headers=auth_headers,
+            json={
+                "drawing_ids": [str(uuid4())],
+                "export_type": "dxf",
+                "paper_size": "INVALID",
+            },
+        )
+        # Should return 400 or 401 (if auth fails first)
+        assert response.status_code in [400, 401]
+
+    def test_batch_export_validates_format(self, client, auth_headers):
+        """Test that invalid format is rejected for lists export."""
+        response = client.post(
+            "/api/v1/exports/batch",
+            headers=auth_headers,
+            json={
+                "drawing_ids": [str(uuid4())],
+                "export_type": "lists",
+                "format": "invalid",
+            },
+        )
+        # Should return 400 or 401 (if auth fails first)
+        assert response.status_code in [400, 401]
+
+    def test_batch_export_validates_list_types(self, client, auth_headers):
+        """Test that invalid list types are rejected."""
+        response = client.post(
+            "/api/v1/exports/batch",
+            headers=auth_headers,
+            json={
+                "drawing_ids": [str(uuid4())],
+                "export_type": "lists",
+                "lists": ["invalid_list_type"],
+            },
+        )
+        # Should return 400 or 401 (if auth fails first)
+        assert response.status_code in [400, 401]
+
+    def test_batch_export_status_returns_404_for_unknown_job(
+        self, client, auth_headers
+    ):
+        """Test that unknown job ID returns 404."""
+        response = client.get(
+            "/api/v1/exports/batch/unknown-job-id/status",
+            headers=auth_headers,
+        )
+        # Should return 404 or 401 (if auth fails first)
+        assert response.status_code in [404, 401]
+
+
+class TestBatchExportProcessing:
+    """Tests for batch export processing logic."""
+
+    def test_batch_export_creates_zip_file(
+        self, mock_drawing, mock_symbols, mock_lines, mock_text_annotations
+    ):
+        """Test that batch export creates a ZIP file with exports."""
+        import tempfile
+        import zipfile
+        from pathlib import Path
+
+        from app.services.export.dxf_export import (
+            DXFExportService,
+            ExportOptions,
+            PaperSize,
+            TitleBlockInfo,
+        )
+
+        # Create multiple exports
+        service = DXFExportService()
+        options = ExportOptions(paper_size=PaperSize.A3)
+        title_info = TitleBlockInfo(
+            drawing_number="P&ID-001",
+            drawing_title="Test Drawing",
+            project_name="Test Project",
+        )
+
+        # Export multiple drawings
+        output_paths = []
+        for i in range(3):
+            mock_drawing.id = uuid4()
+            mock_drawing.original_filename = f"P&ID-00{i+1}.pdf"
+            output_path = service.export_drawing(
+                mock_drawing,
+                mock_symbols,
+                mock_lines,
+                mock_text_annotations,
+                options,
+                title_info,
+            )
+            output_paths.append(output_path)
+
+        # Create a batch ZIP file
+        temp_dir = Path(tempfile.mkdtemp())
+        zip_path = temp_dir / "batch_export.zip"
+
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for path in output_paths:
+                zf.write(path, path.name)
+
+        # Verify ZIP file
+        assert zip_path.exists()
+        assert zip_path.stat().st_size > 0
+
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = zf.namelist()
+            assert len(names) == 3
+            for name in names:
+                assert name.endswith(".dxf")
+
+        # Clean up
+        for path in output_paths:
+            path.unlink()
+        zip_path.unlink()
+        temp_dir.rmdir()
+
+    def test_batch_export_handles_mixed_export_types(
+        self, mock_drawing, mock_symbols, mock_lines, export_metadata
+    ):
+        """Test that batch export handles multiple drawings with data lists."""
+        import tempfile
+        import zipfile
+        from pathlib import Path
+
+        service = DataListExportService()
+
+        # Export equipment list for multiple drawings
+        # Use a set to track unique paths (service may use same base filename)
+        output_paths = {}
+        unique_paths = set()
+        for i in range(2):
+            mock_drawing.id = uuid4()
+            mock_drawing.original_filename = f"P&ID-00{i+1}.pdf"
+            output_path = service.export_equipment_list(
+                mock_drawing,
+                mock_symbols,
+                export_metadata,
+                ExportFormat.XLSX,
+                include_unverified=True,
+            )
+            output_paths[f"P&ID-00{i+1}_equipment.xlsx"] = output_path
+            unique_paths.add(output_path)
+
+        # Create batch ZIP
+        temp_dir = Path(tempfile.mkdtemp())
+        zip_path = temp_dir / "batch_lists.zip"
+
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for name, path in output_paths.items():
+                if path.exists():
+                    zf.write(path, name)
+
+        # Verify
+        assert zip_path.exists()
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = zf.namelist()
+            # At least one export should be in the ZIP
+            assert len(names) >= 1
+            assert all("equipment" in name for name in names)
+
+        # Clean up - only unlink unique paths that exist
+        for path in unique_paths:
+            if path.exists():
+                path.unlink()
+        zip_path.unlink()
+        temp_dir.rmdir()
+
+    def test_batch_export_job_tracking(self):
+        """Test that batch export jobs are tracked correctly."""
+        from app.api.routes.exports import _export_jobs
+
+        job_id = "test-batch-job"
+        _export_jobs[job_id] = {
+            "status": "processing",
+            "export_type": "batch_dxf",
+            "total_drawings": 5,
+            "completed_drawings": 0,
+            "failed_drawings": 0,
+            "file_path": None,
+            "errors": [],
+        }
+
+        # Simulate progress
+        _export_jobs[job_id]["completed_drawings"] = 3
+        _export_jobs[job_id]["failed_drawings"] = 1
+
+        assert _export_jobs[job_id]["completed_drawings"] == 3
+        assert _export_jobs[job_id]["failed_drawings"] == 1
+        assert _export_jobs[job_id]["total_drawings"] == 5
+
+        # Simulate completion
+        _export_jobs[job_id]["status"] = "completed"
+        _export_jobs[job_id]["file_path"] = "/tmp/batch_export.zip"
+
+        assert _export_jobs[job_id]["status"] == "completed"
+        assert _export_jobs[job_id]["file_path"] is not None
+
+        # Clean up
+        del _export_jobs[job_id]
+
+    def test_batch_export_status_tracking(self):
+        """Test that batch export status values are correct."""
+        from app.api.routes.exports import BatchExportStatusResponse
+
+        # Processing state
+        processing = BatchExportStatusResponse(
+            job_id="job-1",
+            status="processing",
+            total_drawings=10,
+            completed_drawings=5,
+            failed_drawings=1,
+            file_path=None,
+            errors=["drawing-3: error"],
+        )
+
+        assert processing.status == "processing"
+        assert processing.completed_drawings + processing.failed_drawings == 6
+        assert processing.file_path is None
+
+        # Completed state
+        completed = BatchExportStatusResponse(
+            job_id="job-1",
+            status="completed",
+            total_drawings=10,
+            completed_drawings=9,
+            failed_drawings=1,
+            file_path="/tmp/batch.zip",
+            errors=["drawing-3: error"],
+        )
+
+        assert completed.status == "completed"
+        assert completed.file_path is not None

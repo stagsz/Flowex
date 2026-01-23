@@ -7,6 +7,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   FileImage,
   Upload,
@@ -22,6 +23,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  X,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -39,6 +41,7 @@ import {
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
 import { ExportDialog } from "@/components/export/ExportDialog"
+import { BatchExportDialog } from "@/components/export/BatchExportDialog"
 
 interface Drawing {
   id: string
@@ -64,6 +67,8 @@ export function DrawingsPage() {
   const [drawings, setDrawings] = useState<Drawing[]>([])
   const [loading, setLoading] = useState(true)
   const [exportDrawing, setExportDrawing] = useState<Drawing | null>(null)
+  const [selectedDrawingIds, setSelectedDrawingIds] = useState<Set<string>>(new Set())
+  const [showBatchExport, setShowBatchExport] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const showToast = useCallback((message: string) => setToast(message), [])
 
@@ -185,6 +190,51 @@ export function DrawingsPage() {
       return sortDirection === "asc" ? comparison : -comparison
     })
 
+  // Get exportable drawings (complete or review status)
+  const exportableDrawings = filteredDrawings.filter(
+    (d) => d.status === "complete" || d.status === "review"
+  )
+  const exportableIds = new Set(exportableDrawings.map((d) => d.id))
+
+  // Selected drawings that are exportable
+  const selectedExportableIds = [...selectedDrawingIds].filter((id) =>
+    exportableIds.has(id)
+  )
+
+  // Check if all exportable drawings are selected
+  const allExportableSelected =
+    exportableDrawings.length > 0 &&
+    exportableDrawings.every((d) => selectedDrawingIds.has(d.id))
+
+  // Toggle selection for a single drawing
+  const toggleSelection = (id: string) => {
+    setSelectedDrawingIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  // Toggle select all exportable drawings
+  const toggleSelectAll = () => {
+    if (allExportableSelected) {
+      // Deselect all
+      setSelectedDrawingIds(new Set())
+    } else {
+      // Select all exportable drawings
+      setSelectedDrawingIds(new Set(exportableDrawings.map((d) => d.id)))
+    }
+  }
+
+  // Clear selection
+  const clearSelection = () => {
+    setSelectedDrawingIds(new Set())
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -262,6 +312,34 @@ export function DrawingsPage() {
         </div>
       </div>
 
+      {/* Bulk Action Bar - shown when drawings are selected */}
+      {selectedExportableIds.length > 0 && (
+        <div className="flex items-center justify-between bg-muted/50 border rounded-lg px-4 py-3">
+          <div className="flex items-center gap-4">
+            <span className="text-sm font-medium">
+              {selectedExportableIds.length} drawing
+              {selectedExportableIds.length === 1 ? "" : "s"} selected
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearSelection}
+              className="h-8"
+            >
+              <X className="h-4 w-4 mr-1" />
+              Clear
+            </Button>
+          </div>
+          <Button
+            onClick={() => setShowBatchExport(true)}
+            size="sm"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export All ({selectedExportableIds.length})
+          </Button>
+        </div>
+      )}
+
       {loading ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
@@ -291,11 +369,44 @@ export function DrawingsPage() {
         </Card>
       ) : (
         <div className="space-y-2">
+          {/* Select All Header */}
+          {exportableDrawings.length > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2 text-sm text-muted-foreground">
+              <Checkbox
+                checked={allExportableSelected}
+                onCheckedChange={toggleSelectAll}
+                aria-label="Select all exportable drawings"
+              />
+              <span>
+                {allExportableSelected
+                  ? "Deselect all"
+                  : `Select all exportable (${exportableDrawings.length})`}
+              </span>
+            </div>
+          )}
           {filteredDrawings.map((drawing) => {
             const StatusIcon = statusConfig[drawing.status].icon
+            const isExportable =
+              drawing.status === "complete" || drawing.status === "review"
+            const isSelected = selectedDrawingIds.has(drawing.id)
             return (
-              <Card key={drawing.id}>
+              <Card
+                key={drawing.id}
+                className={cn(isSelected && "ring-2 ring-primary")}
+              >
                 <CardContent className="flex items-center gap-4 p-4">
+                  {/* Selection checkbox - only for exportable drawings */}
+                  <div className="flex-shrink-0">
+                    {isExportable ? (
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => toggleSelection(drawing.id)}
+                        aria-label={`Select ${drawing.name}`}
+                      />
+                    ) : (
+                      <div className="w-4 h-4" /> // Spacer for alignment
+                    )}
+                  </div>
                   <div className="flex-shrink-0">
                     <FileImage className="h-8 w-8 text-muted-foreground" />
                   </div>
@@ -391,6 +502,19 @@ export function DrawingsPage() {
           drawingName={exportDrawing.name}
           onClose={() => setExportDrawing(null)}
           showToast={showToast}
+        />
+      )}
+
+      {/* Batch Export Dialog */}
+      {showBatchExport && (
+        <BatchExportDialog
+          drawingIds={selectedExportableIds}
+          onClose={() => setShowBatchExport(false)}
+          showToast={showToast}
+          onExportComplete={() => {
+            setShowBatchExport(false)
+            clearSelection()
+          }}
         />
       )}
 

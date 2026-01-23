@@ -1,13 +1,14 @@
 """Export API routes for DXF and data list generation."""
 
 import logging
+import zipfile
 from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
@@ -75,6 +76,49 @@ class ExportStatusResponse(BaseModel):
     status: str
     file_path: str | None = None
     error: str | None = None
+
+
+class BatchExportRequest(BaseModel):
+    """Request body for batch export of multiple drawings."""
+
+    drawing_ids: list[UUID] = Field(
+        ..., description="List of drawing IDs to export", min_length=1
+    )
+    export_type: str = Field(
+        default="dxf", description="Export type: dxf, lists, or checklist"
+    )
+    # DXF options
+    paper_size: str = "A1"
+    scale: str = "1:50"
+    include_connections: bool = True
+    include_annotations: bool = True
+    include_title_block: bool = True
+    # Data list options
+    lists: list[str] = ["equipment", "line", "instrument", "valve", "mto"]
+    format: str = "xlsx"  # xlsx, csv, pdf
+    include_unverified: bool = False
+
+
+class BatchExportJobResponse(BaseModel):
+    """Response for batch export job creation."""
+
+    job_id: str
+    total_drawings: int
+    export_type: str
+    status: str
+    message: str
+
+
+class BatchExportStatusResponse(BaseModel):
+    """Response for batch export job status."""
+
+    job_id: str
+    status: str
+    total_drawings: int
+    completed_drawings: int
+    failed_drawings: int
+    file_path: str | None = None
+    errors: list[str] = []
 
 
 # In-memory job tracking (in production, use Redis or database)
@@ -718,3 +762,327 @@ async def list_export_files(
         "status": job["status"],
         "files": files,
     }
+
+
+# Batch Export Endpoints
+
+
+@router.post(
+    "/batch",
+    response_model=BatchExportJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def batch_export_drawings(
+    request: BatchExportRequest,
+    background_tasks: BackgroundTasks,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> BatchExportJobResponse:
+    """
+    Start batch export for multiple drawings.
+
+    Exports all specified drawings and creates a single ZIP file containing
+    all exports. Only drawings in 'complete' or 'review' status can be exported.
+
+    Returns a job ID that can be used to check status and download the file.
+    """
+    # Validate export type
+    if request.export_type not in ("dxf", "lists", "checklist"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid export type. Must be: dxf, lists, or checklist",
+        )
+
+    # Validate paper size for DXF
+    if request.export_type == "dxf":
+        try:
+            PaperSize(request.paper_size)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid paper size. Must be one of: {[p.value for p in PaperSize]}",
+            )
+
+    # Validate format for lists/checklist
+    if request.export_type in ("lists", "checklist"):
+        try:
+            ExportFormat(request.format)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid format. Must be one of: {[f.value for f in ExportFormat]}",
+            )
+
+    # Validate list types
+    if request.export_type == "lists":
+        valid_lists = {"equipment", "line", "instrument", "valve", "mto", "report"}
+        invalid_lists = set(request.lists) - valid_lists
+        if invalid_lists:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid list types: {invalid_lists}. Must be one of: {valid_lists}",
+            )
+
+    # Verify access to all drawings and filter by status
+    valid_drawings: list[Drawing] = []
+    invalid_ids: list[str] = []
+
+    for drawing_id in request.drawing_ids:
+        drawing = db.query(Drawing).filter(Drawing.id == drawing_id).first()
+        if not drawing:
+            invalid_ids.append(f"{drawing_id}: not found")
+            continue
+
+        project = db.query(Project).filter(Project.id == drawing.project_id).first()
+        if not project or project.organization_id != current_user.organization_id:
+            invalid_ids.append(f"{drawing_id}: access denied")
+            continue
+
+        # Only export complete or review status drawings
+        if drawing.status not in ("complete", "review"):
+            invalid_ids.append(f"{drawing_id}: invalid status ({drawing.status})")
+            continue
+
+        valid_drawings.append(drawing)
+
+    if not valid_drawings:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No valid drawings to export. Issues: {invalid_ids[:5]}",
+        )
+
+    # Create job
+    import uuid
+
+    job_id = str(uuid.uuid4())
+    _export_jobs[job_id] = {
+        "status": "processing",
+        "export_type": f"batch_{request.export_type}",
+        "total_drawings": len(valid_drawings),
+        "completed_drawings": 0,
+        "failed_drawings": 0,
+        "file_path": None,
+        "errors": invalid_ids,  # Include any drawings that couldn't be processed
+    }
+
+    # Queue background task
+    background_tasks.add_task(
+        _process_batch_export,
+        job_id,
+        [d.id for d in valid_drawings],
+        request,
+    )
+
+    return BatchExportJobResponse(
+        job_id=job_id,
+        total_drawings=len(valid_drawings),
+        export_type=request.export_type,
+        status="processing",
+        message=f"Batch export job queued for {len(valid_drawings)} drawings"
+        + (f" ({len(invalid_ids)} skipped)" if invalid_ids else ""),
+    )
+
+
+@router.get("/batch/{job_id}/status", response_model=BatchExportStatusResponse)
+async def get_batch_export_status(
+    job_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> BatchExportStatusResponse:
+    """Get the status of a batch export job."""
+    job = _export_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Export job not found")
+
+    if not job.get("export_type", "").startswith("batch_"):
+        raise HTTPException(status_code=400, detail="Not a batch export job")
+
+    return BatchExportStatusResponse(
+        job_id=job_id,
+        status=job["status"],
+        total_drawings=job.get("total_drawings", 0),
+        completed_drawings=job.get("completed_drawings", 0),
+        failed_drawings=job.get("failed_drawings", 0),
+        file_path=job.get("file_path"),
+        errors=job.get("errors", []),
+    )
+
+
+async def _process_batch_export(
+    job_id: str,
+    drawing_ids: list[UUID],
+    request: BatchExportRequest,
+) -> None:
+    """Background task to process batch export."""
+    import tempfile
+
+    from app.core.database import SessionLocal
+
+    logger.info(f"Starting batch export for job {job_id}, {len(drawing_ids)} drawings")
+
+    db = SessionLocal()
+    try:
+        # Create temporary directory for individual exports
+        output_dir = Path(tempfile.mkdtemp(prefix="flowex_batch_"))
+
+        exported_files: dict[str, Path] = {}
+        completed = 0
+        failed = 0
+
+        for drawing_id in drawing_ids:
+            try:
+                drawing = db.query(Drawing).filter(Drawing.id == drawing_id).first()
+                if not drawing:
+                    failed += 1
+                    _export_jobs[job_id]["errors"].append(f"{drawing_id}: not found")
+                    continue
+
+                symbols, lines, text_annotations = _get_drawing_data(db, drawing_id)
+                drawing_name = drawing.original_filename.rsplit(".", 1)[0]
+
+                if request.export_type == "dxf":
+                    # DXF export
+                    paper_size = PaperSize(request.paper_size)
+                    options = ExportOptions(
+                        format="dxf",
+                        paper_size=paper_size,
+                        scale=request.scale,
+                        include_connections=request.include_connections,
+                        include_annotations=request.include_annotations,
+                        include_title_block=request.include_title_block,
+                    )
+
+                    project = (
+                        db.query(Project)
+                        .filter(Project.id == drawing.project_id)
+                        .first()
+                    )
+                    title_info = TitleBlockInfo(
+                        drawing_number=drawing_name,
+                        drawing_title=drawing.original_filename,
+                        project_name=project.name if project else "Unknown",
+                    )
+
+                    service = DXFExportService()
+                    export_path = service.export_drawing(
+                        drawing, symbols, lines, text_annotations, options, title_info
+                    )
+                    exported_files[f"{drawing_name}.dxf"] = export_path
+
+                elif request.export_type == "lists":
+                    # Data lists export
+                    export_format = ExportFormat(request.format)
+                    metadata = _create_export_metadata(drawing, db)
+                    service = DataListExportService()
+
+                    list_files: dict[str, Path] = {}
+                    for list_type in request.lists:
+                        try:
+                            if list_type == "equipment":
+                                path = service.export_equipment_list(
+                                    drawing,
+                                    symbols,
+                                    metadata,
+                                    export_format,
+                                    request.include_unverified,
+                                )
+                            elif list_type == "line":
+                                path = service.export_line_list(
+                                    drawing,
+                                    lines,
+                                    metadata,
+                                    export_format,
+                                    request.include_unverified,
+                                )
+                            elif list_type == "instrument":
+                                path = service.export_instrument_list(
+                                    drawing,
+                                    symbols,
+                                    metadata,
+                                    export_format,
+                                    request.include_unverified,
+                                )
+                            elif list_type == "valve":
+                                path = service.export_valve_list(
+                                    drawing,
+                                    symbols,
+                                    metadata,
+                                    export_format,
+                                    request.include_unverified,
+                                )
+                            elif list_type == "mto":
+                                path = service.export_mto(
+                                    drawing,
+                                    symbols,
+                                    lines,
+                                    metadata,
+                                    export_format,
+                                    request.include_unverified,
+                                )
+                            else:
+                                continue
+                            list_files[list_type] = path
+                        except Exception as e:
+                            logger.warning(f"Failed to export {list_type} for {drawing_id}: {e}")
+
+                    # If multiple lists, create a sub-zip for this drawing
+                    if len(list_files) > 1:
+                        sub_zip_path = output_dir / f"{drawing_name}_lists.zip"
+                        with zipfile.ZipFile(
+                            sub_zip_path, "w", zipfile.ZIP_DEFLATED
+                        ) as zf:
+                            for list_type, file_path in list_files.items():
+                                zf.write(file_path, file_path.name)
+                        exported_files[f"{drawing_name}_lists.zip"] = sub_zip_path
+                    elif list_files:
+                        # Single list file
+                        file_path = next(iter(list_files.values()))
+                        exported_files[f"{drawing_name}_{request.lists[0]}.{request.format}"] = file_path
+
+                elif request.export_type == "checklist":
+                    # Validation checklist export
+                    export_format = ExportFormat(request.format)
+                    metadata = _create_export_metadata(drawing, db)
+                    service = DataListExportService()
+                    export_path = service.export_validation_checklist(
+                        drawing,
+                        symbols,
+                        lines,
+                        metadata,
+                        export_format,
+                        request.include_unverified,
+                    )
+                    exported_files[f"{drawing_name}_checklist.{request.format}"] = export_path
+
+                completed += 1
+                _export_jobs[job_id]["completed_drawings"] = completed
+                logger.info(f"Batch export: completed {drawing_name} ({completed}/{len(drawing_ids)})")
+
+            except Exception as e:
+                failed += 1
+                _export_jobs[job_id]["failed_drawings"] = failed
+                _export_jobs[job_id]["errors"].append(f"{drawing_id}: {str(e)}")
+                logger.exception(f"Batch export failed for drawing {drawing_id}: {e}")
+
+        # Create final ZIP file containing all exports
+        if exported_files:
+            final_zip_path = output_dir / f"batch_export_{job_id[:8]}.zip"
+            with zipfile.ZipFile(final_zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for filename, file_path in exported_files.items():
+                    if file_path.exists():
+                        zf.write(file_path, filename)
+                        logger.info(f"Added {filename} to batch zip")
+
+            _export_jobs[job_id]["file_path"] = str(final_zip_path)
+            _export_jobs[job_id]["status"] = "completed"
+            logger.info(f"Batch export completed: {final_zip_path}")
+        else:
+            _export_jobs[job_id]["status"] = "failed"
+            _export_jobs[job_id]["errors"].append("No files were exported")
+            logger.error("Batch export failed: no files were exported")
+
+    except Exception as e:
+        logger.exception(f"Batch export failed for job {job_id}: {e}")
+        _export_jobs[job_id]["status"] = "failed"
+        _export_jobs[job_id]["errors"].append(f"Batch export error: {str(e)}")
+    finally:
+        db.close()
