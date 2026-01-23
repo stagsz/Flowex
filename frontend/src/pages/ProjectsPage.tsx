@@ -27,6 +27,7 @@ import {
   FileImage,
   MoreVertical,
   Loader2,
+  Pencil,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -43,6 +44,7 @@ interface Project {
   drawingCount: number
   createdAt: string
   updatedAt: string
+  isArchived: boolean
 }
 
 export function ProjectsPage() {
@@ -54,6 +56,14 @@ export function ProjectsPage() {
   const [newProjectName, setNewProjectName] = useState("")
   const [newProjectDescription, setNewProjectDescription] = useState("")
   const [error, setError] = useState<string | null>(null)
+
+  // Edit project state
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingProject, setEditingProject] = useState<Project | null>(null)
+  const [editProjectName, setEditProjectName] = useState("")
+  const [editProjectDescription, setEditProjectDescription] = useState("")
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
 
   // Fetch projects from API
   useEffect(() => {
@@ -67,6 +77,7 @@ export function ProjectsPage() {
               id: string
               name: string
               description?: string
+              is_archived?: boolean
               created_at?: string
               updated_at?: string
             }) => ({
@@ -76,6 +87,7 @@ export function ProjectsPage() {
               drawingCount: 0, // Would need separate API call or include in response
               createdAt: p.created_at ? new Date(p.created_at).toLocaleDateString() : "",
               updatedAt: p.updated_at ? new Date(p.updated_at).toLocaleDateString() : "",
+              isArchived: p.is_archived || false,
             }))
           )
         }
@@ -108,6 +120,7 @@ export function ProjectsPage() {
           drawingCount: 0,
           createdAt: new Date().toLocaleDateString(),
           updatedAt: new Date().toLocaleDateString(),
+          isArchived: false,
         }
         setProjects((prev) => [newProject, ...prev])
         setNewProjectName("")
@@ -137,6 +150,55 @@ export function ProjectsPage() {
       }
     } catch {
       // Handle error silently
+    }
+  }
+
+  const openEditDialog = (project: Project) => {
+    setEditingProject(project)
+    setEditProjectName(project.name)
+    setEditProjectDescription(project.description)
+    setEditError(null)
+    setIsEditDialogOpen(true)
+  }
+
+  const updateProject = async () => {
+    if (!editingProject || !editProjectName.trim() || isUpdating) return
+
+    setIsUpdating(true)
+    setEditError(null)
+    try {
+      const response = await api.patch(`/api/v1/projects/${editingProject.id}`, {
+        name: editProjectName.trim(),
+        description: editProjectDescription.trim(),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setProjects((prev) =>
+          prev.map((p) =>
+            p.id === editingProject.id
+              ? {
+                  ...p,
+                  name: data.name,
+                  description: data.description || "",
+                  updatedAt: new Date().toLocaleDateString(),
+                }
+              : p
+          )
+        )
+        setIsEditDialogOpen(false)
+        setEditingProject(null)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.detail || `Error: ${response.status} ${response.statusText}`
+        setEditError(errorMessage)
+        console.error("Failed to update project:", errorMessage)
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Network error - please check your connection"
+      setEditError(errorMessage)
+      console.error("Failed to update project:", err)
+    } finally {
+      setIsUpdating(false)
     }
   }
 
@@ -289,6 +351,10 @@ export function ProjectsPage() {
                     <DropdownMenuItem asChild>
                       <Link to={`/upload?project=${project.id}`}>Upload Drawings</Link>
                     </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => openEditDialog(project)}>
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Edit
+                    </DropdownMenuItem>
                     <DropdownMenuItem
                       className="text-destructive"
                       onClick={() => deleteProject(project.id)}
@@ -311,6 +377,71 @@ export function ProjectsPage() {
           ))}
         </div>
       )}
+
+      {/* Edit Project Dialog */}
+      <Dialog
+        open={isEditDialogOpen}
+        onOpenChange={(open) => {
+          setIsEditDialogOpen(open)
+          if (!open) {
+            setEditingProject(null)
+            setEditError(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Project</DialogTitle>
+            <DialogDescription>
+              Update the project name and description.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-project-name">Project Name</Label>
+              <Input
+                id="edit-project-name"
+                name="edit-project-name"
+                autoComplete="off"
+                placeholder="e.g., Refinery Unit A"
+                value={editProjectName}
+                onChange={(e) => setEditProjectName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && updateProject()}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-project-description">Description (optional)</Label>
+              <Textarea
+                id="edit-project-description"
+                name="edit-project-description"
+                autoComplete="off"
+                placeholder="Brief description of the project..."
+                value={editProjectDescription}
+                onChange={(e) => setEditProjectDescription(e.target.value)}
+              />
+            </div>
+          </div>
+          {editError && <p className="text-sm text-destructive">{editError}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={updateProject}
+              disabled={isUpdating || !editProjectName.trim()}
+            >
+              {isUpdating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
