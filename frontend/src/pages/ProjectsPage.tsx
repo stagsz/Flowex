@@ -77,6 +77,7 @@ export function ProjectsPage() {
               id: string
               name: string
               description?: string
+              drawing_count?: number
               is_archived?: boolean
               created_at?: string
               updated_at?: string
@@ -84,7 +85,7 @@ export function ProjectsPage() {
               id: p.id,
               name: p.name,
               description: p.description || "",
-              drawingCount: 0, // Would need separate API call or include in response
+              drawingCount: p.drawing_count || 0,
               createdAt: p.created_at ? new Date(p.created_at).toLocaleDateString() : "",
               updatedAt: p.updated_at ? new Date(p.updated_at).toLocaleDateString() : "",
               isArchived: p.is_archived || false,

@@ -3,11 +3,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import get_current_user, get_db
-from app.models import Project, User
+from app.models import Drawing, Project, User
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -31,6 +32,7 @@ class ProjectResponse(BaseModel):
     is_archived: bool
     created_at: str
     updated_at: str
+    drawing_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -53,6 +55,18 @@ async def list_projects(
         query = query.filter(Project.is_archived == False)  # noqa: E712
     projects = query.order_by(Project.created_at.desc()).offset(skip).limit(limit).all()
 
+    # Get drawing counts for all projects in a single query
+    project_ids = [p.id for p in projects]
+    drawing_counts: dict[str, int] = {}
+    if project_ids:
+        counts = (
+            db.query(Drawing.project_id, func.count(Drawing.id))
+            .filter(Drawing.project_id.in_(project_ids))
+            .group_by(Drawing.project_id)
+            .all()
+        )
+        drawing_counts = {str(pid): count for pid, count in counts}
+
     return [
         ProjectResponse(
             id=str(p.id),
@@ -62,6 +76,7 @@ async def list_projects(
             is_archived=p.is_archived,
             created_at=p.created_at.isoformat(),
             updated_at=p.updated_at.isoformat(),
+            drawing_count=drawing_counts.get(str(p.id), 0),
         )
         for p in projects
     ]
@@ -91,6 +106,7 @@ async def create_project(
         is_archived=project.is_archived,
         created_at=project.created_at.isoformat(),
         updated_at=project.updated_at.isoformat(),
+        drawing_count=0,  # New projects have no drawings
     )
 
 
@@ -107,6 +123,11 @@ async def get_project(
     if project.organization_id != current_user.organization_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
+    # Count drawings for this project
+    drawing_count = db.query(func.count(Drawing.id)).filter(
+        Drawing.project_id == project_id
+    ).scalar() or 0
+
     return ProjectResponse(
         id=str(project.id),
         organization_id=str(project.organization_id),
@@ -115,6 +136,7 @@ async def get_project(
         is_archived=project.is_archived,
         created_at=project.created_at.isoformat(),
         updated_at=project.updated_at.isoformat(),
+        drawing_count=drawing_count,
     )
 
 
@@ -142,6 +164,11 @@ async def update_project(
     db.commit()
     db.refresh(project)
 
+    # Count drawings for this project
+    drawing_count = db.query(func.count(Drawing.id)).filter(
+        Drawing.project_id == project_id
+    ).scalar() or 0
+
     return ProjectResponse(
         id=str(project.id),
         organization_id=str(project.organization_id),
@@ -150,6 +177,7 @@ async def update_project(
         is_archived=project.is_archived,
         created_at=project.created_at.isoformat(),
         updated_at=project.updated_at.isoformat(),
+        drawing_count=drawing_count,
     )
 
 
