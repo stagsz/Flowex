@@ -822,6 +822,7 @@ export function ValidationPage() {
 
   // Ref for focus management
   const containerRef = useRef<HTMLDivElement>(null)
+  const symbolListRef = useRef<HTMLDivElement>(null)
 
   // Drawing info from API
   const [drawing, setDrawing] = useState({
@@ -1642,6 +1643,21 @@ export function ValidationPage() {
     }
   }, [selectedSymbol, symbols])
 
+  // Scroll component list to show selected symbol (VAL-05)
+  useEffect(() => {
+    if (selectedSymbol && symbolListRef.current) {
+      const selectedElement = symbolListRef.current.querySelector(
+        `[data-symbol-id="${selectedSymbol}"]`
+      )
+      if (selectedElement) {
+        selectedElement.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        })
+      }
+    }
+  }, [selectedSymbol])
+
   // Navigate to next/previous symbol in filtered list
   const selectNextSymbol = useCallback(() => {
     if (filteredSymbols.length === 0) return
@@ -2194,7 +2210,7 @@ export function ValidationPage() {
           </div>
 
           {/* Symbol list */}
-          <div className="flex-1 overflow-auto">
+          <div ref={symbolListRef} className="flex-1 overflow-auto">
             {symbolsLoading ? (
               <div className="flex items-center justify-center p-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -2214,6 +2230,7 @@ export function ValidationPage() {
             {filteredSymbols.map((symbol) => (
               <div
                 key={symbol.id}
+                data-symbol-id={symbol.id}
                 onClick={() => setSelectedSymbol(symbol.id)}
                 className={cn(
                   "p-3 border-b cursor-pointer transition-colors",
