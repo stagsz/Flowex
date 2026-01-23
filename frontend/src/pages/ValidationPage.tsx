@@ -33,6 +33,9 @@ import {
   FileText,
   FileSpreadsheet,
   ClipboardCheck,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
@@ -744,6 +747,8 @@ export function ValidationPage() {
   const [selectedSymbolIds, setSelectedSymbolIds] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState("")
   const [filterType, setFilterType] = useState("all")
+  const [sortBy, setSortBy] = useState<"tag" | "type" | "confidence" | "status">("tag")
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
   const [showLowConfidence] = useState(true)
   const [numPages, setNumPages] = useState<number | null>(null)
   const [pageNumber] = useState(1)
@@ -1617,12 +1622,37 @@ export function ValidationPage() {
     setUndoStack(prev => [...prev, action])
   }, [drawingId, redoStack, verifySymbol, flagSymbol, deleteSymbol, restoreSymbol, updateSymbolTag, updateSymbolClass, showToast])
 
-  const filteredSymbols = symbols.filter((symbol) => {
-    const matchesSearch = symbol.tag.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesType = filterType === "all" || symbol.type === filterType
-    const matchesConfidence = showLowConfidence || symbol.confidence >= 0.85
-    return matchesSearch && matchesType && matchesConfidence
-  })
+  const filteredSymbols = symbols
+    .filter((symbol) => {
+      const matchesSearch = symbol.tag.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchesType = filterType === "all" || symbol.type === filterType
+      const matchesConfidence = showLowConfidence || symbol.confidence >= 0.85
+      return matchesSearch && matchesType && matchesConfidence
+    })
+    .sort((a, b) => {
+      let comparison = 0
+      switch (sortBy) {
+        case "tag":
+          comparison = a.tag.localeCompare(b.tag)
+          break
+        case "type":
+          comparison = a.type.localeCompare(b.type)
+          break
+        case "confidence":
+          comparison = a.confidence - b.confidence
+          break
+        case "status":
+          // Sort order: flagged -> pending -> verified
+          const statusOrder = (s: DetectedSymbol) => {
+            if (s.flagged) return 0
+            if (!s.validated) return 1
+            return 2
+          }
+          comparison = statusOrder(a) - statusOrder(b)
+          break
+      }
+      return sortDirection === "asc" ? comparison : -comparison
+    })
 
   const validatedCount = summary?.verified_symbols ?? symbols.filter((s) => s.validated).length
   const flaggedCount = summary?.flagged_symbols ?? symbols.filter((s) => s.flagged).length
@@ -2147,6 +2177,36 @@ export function ValidationPage() {
                   </Button>
                 ))}
               </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+              <Select
+                value={sortBy}
+                onValueChange={(value: "tag" | "type" | "confidence" | "status") => setSortBy(value)}
+              >
+                <SelectTrigger className="h-7 w-[110px] text-xs">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tag">Tag</SelectItem>
+                  <SelectItem value="type">Type</SelectItem>
+                  <SelectItem value="confidence">Confidence</SelectItem>
+                  <SelectItem value="status">Status</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setSortDirection(d => d === "asc" ? "desc" : "asc")}
+                title={sortDirection === "asc" ? "Sort ascending" : "Sort descending"}
+              >
+                {sortDirection === "asc" ? (
+                  <ArrowUp className="h-4 w-4" />
+                ) : (
+                  <ArrowDown className="h-4 w-4" />
+                )}
+              </Button>
             </div>
           </div>
 
