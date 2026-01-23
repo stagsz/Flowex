@@ -163,6 +163,7 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
   const shortcuts = [
     { key: "V", action: "Verify selected item(s)" },
     { key: "F", action: "Flag selected item(s) for review" },
+    { key: "E", action: "Edit selected item (focus tag input)" },
     { key: "Ctrl + A", action: "Select all items" },
     { key: "Delete / Backspace", action: "Delete selected item" },
     { key: "Ctrl + Z", action: "Undo last action" },
@@ -823,6 +824,7 @@ export function ValidationPage() {
   // Ref for focus management
   const containerRef = useRef<HTMLDivElement>(null)
   const symbolListRef = useRef<HTMLDivElement>(null)
+  const tagInputRef = useRef<HTMLInputElement>(null)
 
   // Drawing info from API
   const [drawing, setDrawing] = useState({
@@ -1811,6 +1813,14 @@ export function ValidationPage() {
           e.preventDefault()
           setIsAddSymbolMode(prev => !prev)
           break
+        case "e":
+          // Edit selected item - focus on tag input
+          if (selectedSymbol && tagInputRef.current) {
+            e.preventDefault()
+            tagInputRef.current.focus()
+            tagInputRef.current.select()
+          }
+          break
         case "tab":
           e.preventDefault()
           if (e.shiftKey) {
@@ -2291,6 +2301,7 @@ export function ValidationPage() {
                 <div>
                   <label className="text-xs text-muted-foreground">Tag</label>
                   <Input
+                    ref={tagInputRef}
                     value={editingTag}
                     onChange={(e) => setEditingTag(e.target.value)}
                     onBlur={() => {
