@@ -14,6 +14,7 @@ const UploadPage = lazy(() => import("@/pages/UploadPage").then(m => ({ default:
 const ValidationPage = lazy(() => import("@/pages/ValidationPage").then(m => ({ default: m.ValidationPage })))
 const SettingsIntegrationsPage = lazy(() => import("@/pages/SettingsIntegrationsPage").then(m => ({ default: m.SettingsIntegrationsPage })))
 const BetaAdminPage = lazy(() => import("@/pages/BetaAdminPage").then(m => ({ default: m.BetaAdminPage })))
+const AuditLogsPage = lazy(() => import("@/pages/AuditLogsPage").then(m => ({ default: m.AuditLogsPage })))
 
 function PageLoadingFallback() {
   return (
@@ -119,6 +120,7 @@ function App() {
               <Route path="/upload" element={<UploadPage />} />
               <Route path="/settings/integrations" element={<SettingsIntegrationsPage />} />
               <Route path="/admin/beta" element={<BetaAdminPage />} />
+              <Route path="/admin/audit-logs" element={<AuditLogsPage />} />
             </Route>
 
             {/* Redirects */}

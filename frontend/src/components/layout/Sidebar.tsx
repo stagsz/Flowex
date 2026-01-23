@@ -9,6 +9,7 @@ import {
   Settings,
   HelpCircle,
   Shield,
+  ScrollText,
 } from "lucide-react"
 
 const navigation = [
@@ -25,6 +26,7 @@ const secondaryNavigation = [
 
 const adminNavigation = [
   { name: "Beta Admin", href: "/admin/beta", icon: Shield },
+  { name: "Audit Logs", href: "/admin/audit-logs", icon: ScrollText },
 ]
 
 export function Sidebar() {
