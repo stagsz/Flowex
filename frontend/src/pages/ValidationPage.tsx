@@ -255,7 +255,6 @@ function ExportDialog({
       const response = await api.get(`/api/v1/exports/jobs/${jobId}/status`)
       if (response.ok) {
         const data = await response.json()
-        console.log("Export job status:", data)
         setExportJob({
           jobId: data.job_id,
           status: data.status,
@@ -264,7 +263,6 @@ function ExportDialog({
         })
 
         if (data.status === "completed") {
-          console.log("Export completed, file_path:", data.file_path)
           setExportStatus("completed")
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current)
@@ -358,19 +356,14 @@ function ExportDialog({
   // Download completed export
   const downloadExport = useCallback(async () => {
     if (!exportJob?.jobId) {
-      console.error("No job ID for download")
       return
     }
 
-    console.log("Starting download for job:", exportJob.jobId)
-
     try {
       const response = await api.get(`/api/v1/exports/jobs/${exportJob.jobId}/download`)
-      console.log("Download response status:", response.status)
 
       if (response.ok) {
         const blob = await response.blob()
-        console.log("Downloaded blob size:", blob.size, "type:", blob.type)
 
         if (blob.size === 0) {
           console.error("Downloaded file is empty")
@@ -397,7 +390,6 @@ function ExportDialog({
           }
         }
         a.download = `${drawingName.replace(/\.[^/.]+$/, "")}${suffix}.${extension}`
-        console.log("Download filename:", a.download)
 
         document.body.appendChild(a)
         a.click()
@@ -1369,10 +1361,8 @@ export function ValidationPage() {
           is_verified: true, // Manual additions are considered verified
         }
       )
-      console.log("Create symbol response status:", response.status)
       if (response.ok) {
         const data = await response.json()
-        console.log("Symbol created successfully:", data)
         const newSymbol: DetectedSymbol = {
           id: data.id,
           type: category,
