@@ -57,7 +57,15 @@
       "Bash(git -C D:/Flowex status -sb)",
       "Bash(git -C D:/Flowex log origin/master..HEAD --oneline)",
       "Bash(git -C D:/Flowex diff --stat)",
-      "Bash(git -C D:/Flowex diff backend/app/api/routes/users.py)"
+      "Bash(git -C D:/Flowex diff backend/app/api/routes/users.py)",
+      "Bash(git -C D:/Flowex log --oneline -3)",
+      "Bash(git init:*)",
+      "Bash(npm run test:*)",
+      "Bash(npx vitest:*)",
+      "Bash(node:*)",
+      "Bash(git -C D:/Flowex add:*)",
+      "Bash(git -C D:/Flowex commit -m \"$\\(cat <<''EOF''\nfix\\(tests\\): use ES import for COOKIE_CATEGORIES instead of require\\(\\)\n\nThe path alias @/ doesn''t resolve with CommonJS require\\(\\) in vitest.\nChanged to use the already-imported COOKIE_CATEGORIES constant.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(D:/Flowex/.venv/Scripts/python.exe -m pytest -v)"
     ]
   }
 }
