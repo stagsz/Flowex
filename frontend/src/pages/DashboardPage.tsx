@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { useAuthStore } from "@/stores/authStore"
 import { api } from "@/lib/api"
 import { UsageStatsCard } from "@/components/UsageStatsCard"
+import { DashboardActivityFeed } from "@/components/ProjectActivityFeed"
 import {
   FileImage,
   FolderKanban,
@@ -89,44 +90,6 @@ export function DashboardPage() {
     ? Math.round((stats.processed / stats.totalDrawings) * 100)
     : 0
 
-  const statusIcon = {
-    completed: <CheckCircle className="h-4 w-4 text-green-500" />,
-    processing: <Clock className="h-4 w-4 text-yellow-500 animate-pulse" />,
-    failed: <AlertCircle className="h-4 w-4 text-red-500" />,
-  }
-
-  // Recent drawings mock for now - would come from API
-  const recentDrawings = [
-    {
-      id: "1",
-      name: "P&ID-001-Rev3.pdf",
-      project: "Refinery Unit A",
-      status: "completed",
-      processedAt: "2 hours ago",
-    },
-    {
-      id: "2",
-      name: "P&ID-002-Rev1.pdf",
-      project: "Refinery Unit A",
-      status: "processing",
-      processedAt: "Processing...",
-    },
-    {
-      id: "3",
-      name: "PFD-Main-Process.pdf",
-      project: "Chemical Plant B",
-      status: "completed",
-      processedAt: "Yesterday",
-    },
-    {
-      id: "4",
-      name: "P&ID-Utilities.pdf",
-      project: "Chemical Plant B",
-      status: "failed",
-      processedAt: "Failed",
-    },
-  ]
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -204,40 +167,7 @@ export function DashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Drawings</CardTitle>
-            <CardDescription>
-              Your most recently uploaded drawings
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentDrawings.map((drawing) => (
-                <div
-                  key={drawing.id}
-                  className="flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-3">
-                    {statusIcon[drawing.status as keyof typeof statusIcon]}
-                    <div>
-                      <p className="text-sm font-medium">{drawing.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {drawing.project}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {drawing.processedAt}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <Button variant="link" className="mt-4 p-0" asChild>
-              <Link to="/drawings">View all drawings</Link>
-            </Button>
-          </CardContent>
-        </Card>
+        <DashboardActivityFeed limit={5} />
 
         <Card>
           <CardHeader>
