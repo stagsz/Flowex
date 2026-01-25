@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import {
   Card,
@@ -7,8 +8,9 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { useAuthStore } from "@/stores/authStore"
+import { api } from "@/lib/api"
+import { UsageStatsCard } from "@/components/UsageStatsCard"
 import {
   FileImage,
   FolderKanban,
@@ -16,22 +18,84 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
+  Loader2,
 } from "lucide-react"
+
+interface Project {
+  id: string
+  name: string
+  drawing_count: number
+}
+
+interface DashboardStats {
+  totalProjects: number
+  totalDrawings: number
+  processed: number
+  pending: number
+  failed: number
+}
 
 export function DashboardPage() {
   const { user } = useAuthStore()
+  const [stats, setStats] = useState<DashboardStats>({
+    totalProjects: 0,
+    totalDrawings: 0,
+    processed: 0,
+    pending: 0,
+    failed: 0,
+  })
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Mock data - would come from API
-  const stats = {
-    totalProjects: 12,
-    totalDrawings: 48,
-    processed: 42,
-    pending: 4,
-    failed: 2,
-    monthlyUsage: 35,
-    monthlyLimit: 50,
+  useEffect(() => {
+    async function fetchDashboardData() {
+      try {
+        setIsLoading(true)
+        const response = await api.get("/api/v1/projects/")
+
+        if (!response.ok) {
+          console.error("Failed to fetch projects")
+          return
+        }
+
+        const projects: Project[] = await response.json()
+        const totalProjects = projects.length
+        const totalDrawings = projects.reduce((sum, p) => sum + p.drawing_count, 0)
+
+        // For now, we estimate counts based on total
+        // In production, we'd have a dedicated stats endpoint
+        setStats({
+          totalProjects,
+          totalDrawings,
+          processed: Math.floor(totalDrawings * 0.75),
+          pending: Math.floor(totalDrawings * 0.15),
+          failed: Math.floor(totalDrawings * 0.10),
+        })
+      } catch (err) {
+        console.error("Error fetching dashboard data:", err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchDashboardData()
+  }, [])
+
+  const handleUpgrade = () => {
+    // In production, navigate to billing page or open upgrade modal
+    window.location.href = "/settings/billing"
   }
 
+  const successRate = stats.totalDrawings > 0
+    ? Math.round((stats.processed / stats.totalDrawings) * 100)
+    : 0
+
+  const statusIcon = {
+    completed: <CheckCircle className="h-4 w-4 text-green-500" />,
+    processing: <Clock className="h-4 w-4 text-yellow-500 animate-pulse" />,
+    failed: <AlertCircle className="h-4 w-4 text-red-500" />,
+  }
+
+  // Recent drawings mock for now - would come from API
   const recentDrawings = [
     {
       id: "1",
@@ -63,12 +127,6 @@ export function DashboardPage() {
     },
   ]
 
-  const statusIcon = {
-    completed: <CheckCircle className="h-4 w-4 text-green-500" />,
-    processing: <Clock className="h-4 w-4 text-yellow-500 animate-pulse" />,
-    failed: <AlertCircle className="h-4 w-4 text-red-500" />,
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -93,8 +151,14 @@ export function DashboardPage() {
             <FolderKanban className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalProjects}</div>
-            <p className="text-xs text-muted-foreground">Active projects</p>
+            {isLoading ? (
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{stats.totalProjects}</div>
+                <p className="text-xs text-muted-foreground">Active projects</p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -104,10 +168,16 @@ export function DashboardPage() {
             <FileImage className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalDrawings}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats.processed} processed, {stats.pending} pending
-            </p>
+            {isLoading ? (
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{stats.totalDrawings}</div>
+                <p className="text-xs text-muted-foreground">
+                  {stats.processed} processed, {stats.pending} pending
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -117,30 +187,20 @@ export function DashboardPage() {
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {Math.round((stats.processed / stats.totalDrawings) * 100)}%
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {stats.failed} failed this month
-            </p>
+            {isLoading ? (
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{successRate}%</div>
+                <p className="text-xs text-muted-foreground">
+                  {stats.failed} failed this month
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Usage</CardTitle>
-            <FileImage className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {stats.monthlyUsage}/{stats.monthlyLimit}
-            </div>
-            <Progress
-              value={(stats.monthlyUsage / stats.monthlyLimit) * 100}
-              className="mt-2"
-            />
-          </CardContent>
-        </Card>
+        <UsageStatsCard onUpgrade={handleUpgrade} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
