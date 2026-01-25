@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.models.audit_log import AuditLog
     from app.models.beta_feedback import BetaFeedback
     from app.models.organization import Organization
+    from app.models.project_member import ProjectMember
 
 
 class UserRole(str, enum.Enum):
@@ -60,4 +61,10 @@ class User(Base, UUIDMixin, TimestampMixin):
     )
     audit_logs: Mapped[list["AuditLog"]] = relationship(
         "AuditLog", back_populates="user"
+    )
+    project_memberships: Mapped[list["ProjectMember"]] = relationship(
+        "ProjectMember",
+        foreign_keys="ProjectMember.user_id",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )

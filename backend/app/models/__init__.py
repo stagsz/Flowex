@@ -13,6 +13,7 @@ from app.models.line import Line
 from app.models.organization import Organization, SubscriptionTier
 from app.models.organization_invite import InviteStatus, OrganizationInvite
 from app.models.project import Project
+from app.models.project_member import ProjectMember, ProjectRole
 from app.models.symbol import Symbol, SymbolCategory
 from app.models.text_annotation import TextAnnotation
 from app.models.user import SSOProvider, User, UserRole
@@ -30,6 +31,8 @@ __all__ = [
     "UserRole",
     "SSOProvider",
     "Project",
+    "ProjectMember",
+    "ProjectRole",
     "Drawing",
     "DrawingStatus",
     "FileType",

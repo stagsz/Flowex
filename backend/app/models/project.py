@@ -10,6 +10,7 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 if TYPE_CHECKING:
     from app.models.drawing import Drawing
     from app.models.organization import Organization
+    from app.models.project_member import ProjectMember
 
 
 class Project(Base, UUIDMixin, TimestampMixin):
@@ -28,3 +29,6 @@ class Project(Base, UUIDMixin, TimestampMixin):
     # Relationships
     organization: Mapped["Organization"] = relationship("Organization", back_populates="projects")
     drawings: Mapped[list["Drawing"]] = relationship("Drawing", back_populates="project")
+    members: Mapped[list["ProjectMember"]] = relationship(
+        "ProjectMember", back_populates="project", cascade="all, delete-orphan"
+    )

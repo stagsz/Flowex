@@ -10,12 +10,18 @@ from pydantic import BaseModel
 from app.api.routes.projects import (
     ActivityItemResponse,
     ActivityListResponse,
+    AddProjectMemberByEmailRequest,
+    AddProjectMemberRequest,
     ProjectCreate,
+    ProjectMemberListResponse,
+    ProjectMemberResponse,
     ProjectResponse,
     ProjectUpdate,
+    UpdateProjectMemberRoleRequest,
     _ACTION_DISPLAY_MAP,
 )
 from app.models import AuditAction
+from app.models.project_member import ProjectMember, ProjectRole
 
 
 class TestProjectModels:
@@ -252,3 +258,171 @@ class TestActionDisplayMap:
         assert _ACTION_DISPLAY_MAP[AuditAction.LINE_DELETE] == "deleted_line"
         assert _ACTION_DISPLAY_MAP[AuditAction.LINE_VERIFY] == "verified_line"
         assert _ACTION_DISPLAY_MAP[AuditAction.LINE_BULK_VERIFY] == "verified_lines"
+
+
+# =============================================================================
+# Project Member Management Tests (PM-05)
+# =============================================================================
+
+
+class TestProjectMemberModels:
+    """Tests for project member Pydantic models."""
+
+    def test_project_member_response_model(self):
+        """Test ProjectMemberResponse model serialization."""
+        response = ProjectMemberResponse(
+            id=str(uuid4()),
+            user_id=str(uuid4()),
+            user_email="user@example.com",
+            user_name="Test User",
+            role="editor",
+            added_at=datetime.now(timezone.utc),
+            added_by_name="Admin User",
+        )
+        assert response.user_email == "user@example.com"
+        assert response.user_name == "Test User"
+        assert response.role == "editor"
+        assert response.added_by_name == "Admin User"
+
+    def test_project_member_response_null_added_by(self):
+        """Test ProjectMemberResponse with null added_by (original owner)."""
+        response = ProjectMemberResponse(
+            id=str(uuid4()),
+            user_id=str(uuid4()),
+            user_email="owner@example.com",
+            user_name="Project Owner",
+            role="owner",
+            added_at=datetime.now(timezone.utc),
+            added_by_name=None,
+        )
+        assert response.added_by_name is None
+        assert response.role == "owner"
+
+    def test_project_member_list_response_model(self):
+        """Test ProjectMemberListResponse model serialization."""
+        member = ProjectMemberResponse(
+            id=str(uuid4()),
+            user_id=str(uuid4()),
+            user_email="user@example.com",
+            user_name="Test User",
+            role="editor",
+            added_at=datetime.now(timezone.utc),
+            added_by_name="Admin",
+        )
+        response = ProjectMemberListResponse(
+            items=[member],
+            total=1,
+            page=1,
+            page_size=20,
+        )
+        assert len(response.items) == 1
+        assert response.total == 1
+        assert response.page == 1
+        assert response.page_size == 20
+
+    def test_project_member_list_response_empty(self):
+        """Test ProjectMemberListResponse with no members."""
+        response = ProjectMemberListResponse(
+            items=[],
+            total=0,
+            page=1,
+            page_size=20,
+        )
+        assert len(response.items) == 0
+        assert response.total == 0
+
+    def test_add_project_member_request_model(self):
+        """Test AddProjectMemberRequest model validation."""
+        request = AddProjectMemberRequest(
+            user_id=str(uuid4()),
+            role=ProjectRole.EDITOR,
+        )
+        assert request.role == ProjectRole.EDITOR
+
+    def test_add_project_member_request_default_role(self):
+        """Test AddProjectMemberRequest defaults to editor role."""
+        request = AddProjectMemberRequest(user_id=str(uuid4()))
+        assert request.role == ProjectRole.EDITOR
+
+    def test_add_project_member_by_email_request_model(self):
+        """Test AddProjectMemberByEmailRequest model validation."""
+        request = AddProjectMemberByEmailRequest(
+            email="newuser@example.com",
+            role=ProjectRole.VIEWER,
+        )
+        assert request.email == "newuser@example.com"
+        assert request.role == ProjectRole.VIEWER
+
+    def test_add_project_member_by_email_default_role(self):
+        """Test AddProjectMemberByEmailRequest defaults to editor role."""
+        request = AddProjectMemberByEmailRequest(email="user@example.com")
+        assert request.role == ProjectRole.EDITOR
+
+    def test_update_project_member_role_request(self):
+        """Test UpdateProjectMemberRoleRequest model validation."""
+        request = UpdateProjectMemberRoleRequest(role=ProjectRole.OWNER)
+        assert request.role == ProjectRole.OWNER
+
+
+class TestProjectRoleEnum:
+    """Tests for ProjectRole enum values."""
+
+    def test_project_role_owner(self):
+        """Test owner role value."""
+        assert ProjectRole.OWNER.value == "owner"
+
+    def test_project_role_editor(self):
+        """Test editor role value."""
+        assert ProjectRole.EDITOR.value == "editor"
+
+    def test_project_role_viewer(self):
+        """Test viewer role value."""
+        assert ProjectRole.VIEWER.value == "viewer"
+
+    def test_project_role_all_values(self):
+        """Test all project role enum values."""
+        values = [r.value for r in ProjectRole]
+        assert "owner" in values
+        assert "editor" in values
+        assert "viewer" in values
+        assert len(values) == 3
+
+
+class TestProjectMemberModel:
+    """Tests for ProjectMember SQLAlchemy model methods."""
+
+    def test_can_edit_owner(self):
+        """Test owner can edit."""
+        member = ProjectMember()
+        member.role = ProjectRole.OWNER
+        assert member.can_edit() is True
+
+    def test_can_edit_editor(self):
+        """Test editor can edit."""
+        member = ProjectMember()
+        member.role = ProjectRole.EDITOR
+        assert member.can_edit() is True
+
+    def test_can_edit_viewer(self):
+        """Test viewer cannot edit."""
+        member = ProjectMember()
+        member.role = ProjectRole.VIEWER
+        assert member.can_edit() is False
+
+    def test_can_manage_members_owner(self):
+        """Test owner can manage members."""
+        member = ProjectMember()
+        member.role = ProjectRole.OWNER
+        assert member.can_manage_members() is True
+
+    def test_can_manage_members_editor(self):
+        """Test editor cannot manage members."""
+        member = ProjectMember()
+        member.role = ProjectRole.EDITOR
+        assert member.can_manage_members() is False
+
+    def test_can_manage_members_viewer(self):
+        """Test viewer cannot manage members."""
+        member = ProjectMember()
+        member.role = ProjectRole.VIEWER
+        assert member.can_manage_members() is False

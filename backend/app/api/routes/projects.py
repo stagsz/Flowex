@@ -3,13 +3,22 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import desc, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import get_current_user, get_db
-from app.models import AuditAction, AuditLog, Drawing, EntityType, Project, User
+from app.models import (
+    AuditAction,
+    AuditLog,
+    Drawing,
+    EntityType,
+    Project,
+    ProjectMember,
+    ProjectRole,
+    User,
+)
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -110,13 +119,25 @@ async def create_project(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ProjectResponse:
-    """Create a new project."""
+    """Create a new project.
+
+    The creating user is automatically added as the project owner (PM-05).
+    """
     project = Project(
         organization_id=current_user.organization_id,
         name=project_data.name,
         description=project_data.description,
     )
     db.add(project)
+    db.flush()  # Get the project ID before creating membership
+
+    # Add creator as project owner (PM-05)
+    owner_membership = ProjectMember(
+        project_id=project.id,
+        user_id=current_user.id,
+        role=ProjectRole.OWNER,
+    )
+    db.add(owner_membership)
     db.commit()
     db.refresh(project)
 
@@ -366,3 +387,377 @@ async def get_project_activity(
         total=total,
         limit=limit,
     )
+
+
+# =============================================================================
+# Project Member Management (PM-05)
+# =============================================================================
+
+
+class ProjectMemberResponse(BaseModel):
+    """Project member information."""
+
+    id: str
+    user_id: str
+    user_email: str
+    user_name: str | None
+    role: str
+    added_at: datetime
+    added_by_name: str | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProjectMemberListResponse(BaseModel):
+    """Paginated list of project members."""
+
+    items: list[ProjectMemberResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class AddProjectMemberRequest(BaseModel):
+    """Request to add a user to a project."""
+
+    user_id: str = Field(..., description="User ID to add to the project")
+    role: ProjectRole = Field(default=ProjectRole.EDITOR, description="Role to assign")
+
+
+class AddProjectMemberByEmailRequest(BaseModel):
+    """Request to add a user to a project by email."""
+
+    email: EmailStr = Field(..., description="Email address of the user to add")
+    role: ProjectRole = Field(default=ProjectRole.EDITOR, description="Role to assign")
+
+
+class UpdateProjectMemberRoleRequest(BaseModel):
+    """Request to update a project member's role."""
+
+    role: ProjectRole = Field(..., description="New role for the member")
+
+
+def _serialize_project_member(member: ProjectMember) -> ProjectMemberResponse:
+    """Serialize a project member for API response."""
+    return ProjectMemberResponse(
+        id=str(member.id),
+        user_id=str(member.user_id),
+        user_email=member.user.email,
+        user_name=member.user.name,
+        role=member.role.value,
+        added_at=member.created_at,
+        added_by_name=member.added_by.name if member.added_by else None,
+    )
+
+
+def _get_project_with_access_check(
+    db: Session,
+    project_id: UUID,
+    current_user: User,
+) -> Project:
+    """Get a project and verify the user has access to it."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    return project
+
+
+def _get_user_project_role(db: Session, project_id: UUID, user_id: UUID) -> ProjectRole | None:
+    """Get a user's role in a project, or None if not a member."""
+    member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project_id,
+        ProjectMember.user_id == user_id,
+    ).first()
+    return member.role if member else None
+
+
+def _require_project_owner(
+    db: Session,
+    project_id: UUID,
+    current_user: User,
+) -> None:
+    """Require that the current user is the project owner."""
+    role = _get_user_project_role(db, project_id, current_user.id)
+    if role != ProjectRole.OWNER:
+        raise HTTPException(
+            status_code=403,
+            detail="Only project owners can perform this action",
+        )
+
+
+@router.get("/{project_id}/members", response_model=ProjectMemberListResponse)
+async def list_project_members(
+    project_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+) -> ProjectMemberListResponse:
+    """List all members of a project.
+
+    All organization members can view the member list.
+    """
+    project = _get_project_with_access_check(db, project_id, current_user)
+
+    # Build query
+    query = db.query(ProjectMember).filter(ProjectMember.project_id == project.id)
+
+    # Get total count
+    total = query.count()
+
+    # Get paginated results
+    members = (
+        query.order_by(ProjectMember.created_at)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return ProjectMemberListResponse(
+        items=[_serialize_project_member(m) for m in members],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.post(
+    "/{project_id}/members",
+    response_model=ProjectMemberResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_project_member(
+    project_id: UUID,
+    body: AddProjectMemberRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> ProjectMemberResponse:
+    """Add a user to a project.
+
+    Only project owners can add members.
+    Users must be in the same organization as the project.
+    """
+    project = _get_project_with_access_check(db, project_id, current_user)
+    _require_project_owner(db, project_id, current_user)
+
+    # Parse user ID
+    try:
+        target_user_id = UUID(body.user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
+
+    # Find the target user
+    target_user = db.query(User).filter(User.id == target_user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Verify user is in the same organization
+    if target_user.organization_id != project.organization_id:
+        raise HTTPException(
+            status_code=400,
+            detail="User must be in the same organization as the project",
+        )
+
+    # Check if already a member
+    existing = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project_id,
+        ProjectMember.user_id == target_user_id,
+    ).first()
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="User is already a member of this project",
+        )
+
+    # Create membership
+    member = ProjectMember(
+        project_id=project_id,
+        user_id=target_user_id,
+        role=body.role,
+        added_by_id=current_user.id,
+    )
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+
+    return _serialize_project_member(member)
+
+
+@router.post(
+    "/{project_id}/members/by-email",
+    response_model=ProjectMemberResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_project_member_by_email(
+    project_id: UUID,
+    body: AddProjectMemberByEmailRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> ProjectMemberResponse:
+    """Add a user to a project by email address.
+
+    Only project owners can add members.
+    Users must be in the same organization as the project.
+    """
+    project = _get_project_with_access_check(db, project_id, current_user)
+    _require_project_owner(db, project_id, current_user)
+
+    # Find the target user by email
+    target_user = db.query(User).filter(User.email == body.email).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found with this email")
+
+    # Verify user is in the same organization
+    if target_user.organization_id != project.organization_id:
+        raise HTTPException(
+            status_code=400,
+            detail="User must be in the same organization as the project",
+        )
+
+    # Check if already a member
+    existing = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project_id,
+        ProjectMember.user_id == target_user.id,
+    ).first()
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="User is already a member of this project",
+        )
+
+    # Create membership
+    member = ProjectMember(
+        project_id=project_id,
+        user_id=target_user.id,
+        role=body.role,
+        added_by_id=current_user.id,
+    )
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+
+    return _serialize_project_member(member)
+
+
+@router.patch(
+    "/{project_id}/members/{member_id}",
+    response_model=ProjectMemberResponse,
+)
+async def update_project_member_role(
+    project_id: UUID,
+    member_id: UUID,
+    body: UpdateProjectMemberRoleRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> ProjectMemberResponse:
+    """Update a project member's role.
+
+    Only project owners can update member roles.
+    Cannot change the role of the last owner (prevents orphaned projects).
+    """
+    _get_project_with_access_check(db, project_id, current_user)
+    _require_project_owner(db, project_id, current_user)
+
+    # Find the membership
+    member = db.query(ProjectMember).filter(
+        ProjectMember.id == member_id,
+        ProjectMember.project_id == project_id,
+    ).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Project member not found")
+
+    # Prevent removing the last owner
+    if member.role == ProjectRole.OWNER and body.role != ProjectRole.OWNER:
+        owner_count = db.query(ProjectMember).filter(
+            ProjectMember.project_id == project_id,
+            ProjectMember.role == ProjectRole.OWNER,
+        ).count()
+        if owner_count <= 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot change the last owner's role. Assign another owner first.",
+            )
+
+    member.role = body.role
+    db.commit()
+    db.refresh(member)
+
+    return _serialize_project_member(member)
+
+
+@router.delete(
+    "/{project_id}/members/{member_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def remove_project_member(
+    project_id: UUID,
+    member_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> None:
+    """Remove a user from a project.
+
+    Only project owners can remove members.
+    Cannot remove the last owner (prevents orphaned projects).
+    Users can remove themselves unless they are the last owner.
+    """
+    _get_project_with_access_check(db, project_id, current_user)
+
+    # Find the membership
+    member = db.query(ProjectMember).filter(
+        ProjectMember.id == member_id,
+        ProjectMember.project_id == project_id,
+    ).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Project member not found")
+
+    # Check permissions: owner can remove anyone, users can remove themselves
+    current_user_role = _get_user_project_role(db, project_id, current_user.id)
+    is_self = member.user_id == current_user.id
+
+    if not is_self and current_user_role != ProjectRole.OWNER:
+        raise HTTPException(
+            status_code=403,
+            detail="Only project owners can remove other members",
+        )
+
+    # Prevent removing the last owner
+    if member.role == ProjectRole.OWNER:
+        owner_count = db.query(ProjectMember).filter(
+            ProjectMember.project_id == project_id,
+            ProjectMember.role == ProjectRole.OWNER,
+        ).count()
+        if owner_count <= 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot remove the last owner. Assign another owner first.",
+            )
+
+    db.delete(member)
+    db.commit()
+
+
+@router.get("/{project_id}/members/me", response_model=ProjectMemberResponse | None)
+async def get_my_project_membership(
+    project_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> ProjectMemberResponse | None:
+    """Get the current user's membership in a project.
+
+    Returns the membership details if the user is a member, or null if not.
+    Useful for checking permissions in the frontend.
+    """
+    project = _get_project_with_access_check(db, project_id, current_user)
+
+    member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project.id,
+        ProjectMember.user_id == current_user.id,
+    ).first()
+
+    if not member:
+        return None
+
+    return _serialize_project_member(member)
