@@ -58,6 +58,11 @@ class Drawing(Base, UUIDMixin, TimestampMixin):
     processing_completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Data retention: Track when drawing was last accessed (GDPR-08)
+    # Used to determine if drawing should be archived/deleted after retention period
+    last_accessed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     # Relationships
     project: Mapped["Project"] = relationship("Project", back_populates="drawings")

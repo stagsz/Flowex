@@ -1,8 +1,9 @@
 import enum
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, ForeignKey, String
+from sqlalchemy import DateTime, Enum, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -44,6 +45,13 @@ class User(Base, UUIDMixin, TimestampMixin):
     sso_provider: Mapped[SSOProvider | None] = mapped_column(Enum(SSOProvider), nullable=True)
     sso_subject_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+
+    # Data retention: Scheduled deletion support (GDPR Article 17)
+    # When set, account will be deleted after this datetime (grace period)
+    scheduled_deletion_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    deletion_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Relationships
     organization: Mapped["Organization"] = relationship("Organization", back_populates="users")

@@ -85,6 +85,7 @@ class Settings(BaseSettings):
     ML_MODEL_BUCKET: str = "models"  # Supabase bucket for ML models
     ML_MODEL_PATH: str = "best_model.pt"  # Path to model in bucket (trained on real P&ID data)
     ML_MODEL_LOCAL_PATH: str = "/tmp/best_model.pt"  # Local cache path
+    ML_CONFIDENCE_THRESHOLD: float = 0.25  # Min confidence for symbol detection (lower = more detections)
 
     # Authentication Provider: "supabase" or "auth0"
     AUTH_PROVIDER: str = "supabase"
@@ -149,6 +150,18 @@ class Settings(BaseSettings):
     RATE_LIMIT_CALLBACK: str = "20/minute"  # OAuth callback limit
     RATE_LIMIT_REFRESH: str = "30/minute"  # Token refresh limit
     RATE_LIMIT_DEFAULT: str = "100/minute"  # Default limit for other endpoints
+
+    # Data Retention Configuration (GDPR-08)
+    # Enable data retention policy enforcement
+    RETENTION_ENABLED: bool = True
+    # Number of days to keep drawings after last access (Article 5(1)(e) - storage limitation)
+    RETENTION_DAYS_DRAWINGS: int = 365  # 1 year
+    # Number of days to keep audit logs (3 years per spec)
+    RETENTION_DAYS_AUDIT_LOGS: int = 1095  # 3 years
+    # Grace period for account deletion (days to allow cancellation)
+    DELETION_GRACE_PERIOD_DAYS: int = 30  # Changed from 7 to 30 for user safety
+    # Batch size for retention cleanup operations (to avoid memory issues)
+    RETENTION_CLEANUP_BATCH_SIZE: int = 100
 
     # Security Headers Configuration
     # X-Frame-Options: DENY or SAMEORIGIN (clickjacking protection)

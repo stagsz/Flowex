@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -9,13 +10,19 @@ from sqlalchemy.orm import Session
 
 from app.core.config import StorageProvider, settings
 from app.core.deps import get_current_user, get_db
-from app.models import DrawingStatus, Line, Project, Symbol, TextAnnotation, User
+from app.models import Drawing, DrawingStatus, Line, Project, Symbol, TextAnnotation, User
 from app.models.symbol import SymbolCategory
 from app.services import drawings as drawing_service
 from app.services.drawings import FileValidationError
 from app.services.storage import get_storage_service
 
 router = APIRouter(prefix="/drawings", tags=["drawings"])
+
+
+def _update_last_accessed(db: Session, drawing: Drawing) -> None:
+    """Update the last_accessed_at timestamp for data retention tracking (GDPR-08)."""
+    drawing.last_accessed_at = datetime.now(UTC)
+    db.commit()
 
 
 def calculate_progress_percentage(
@@ -230,6 +237,9 @@ async def get_drawing(
     if not project or project.organization_id != current_user.organization_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
+    # Update last access time for retention tracking (GDPR-08)
+    _update_last_accessed(db, drawing)
+
     # Get download URL - use API endpoint for local storage
     try:
         if settings.STORAGE_PROVIDER == StorageProvider.LOCAL:
@@ -298,6 +308,9 @@ async def download_drawing(
     project = db.query(Project).filter(Project.id == drawing.project_id).first()
     if not project or project.organization_id != current_user.organization_id:
         raise HTTPException(status_code=403, detail="Access denied")
+
+    # Update last access time for retention tracking (GDPR-08)
+    _update_last_accessed(db, drawing)
 
     # Download file from storage
     try:
