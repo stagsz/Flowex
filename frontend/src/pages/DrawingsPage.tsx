@@ -100,7 +100,7 @@ export function DrawingsPage() {
                   name: d.original_filename,
                   projectName: project.name,
                   status: d.status as Drawing["status"],
-                  progress: d.status === "complete" ? 100 : d.status === "review" ? 80 : d.status === "processing" ? 50 : 0,
+                  progress: d.progress_percentage ?? 0,  // Use real progress from API
                   symbolsDetected: 0, // Would come from symbols API
                   createdAt: new Date(d.created_at).toLocaleDateString(),
                   processedAt: d.processing_completed_at
@@ -429,8 +429,13 @@ export function DrawingsPage() {
                     <p className="text-sm text-muted-foreground">
                       {drawing.projectName}
                     </p>
-                    {drawing.status === "processing" && (
-                      <Progress value={drawing.progress} className="mt-2 h-1" />
+                    {(drawing.status === "processing" || drawing.status === "review") && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <Progress value={drawing.progress} className="h-1 flex-1" />
+                        <span className="text-xs text-muted-foreground w-8">
+                          {drawing.progress}%
+                        </span>
+                      </div>
                     )}
                   </div>
 

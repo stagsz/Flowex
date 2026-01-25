@@ -87,7 +87,9 @@ while true; do
     echo "Starting Claude at $(date '+%H:%M:%S')..." | tee -a "$LOG_FILE"
 
     # Run Claude with prompt from stdin, stream output to both console and log in real-time
-    claude -p \
+    # Use full path for Windows npm global install (need .cmd extension on Windows)
+    CLAUDE_CMD="${CLAUDE_CMD:-$(command -v claude 2>/dev/null || echo 'C:/Users/staff/AppData/Roaming/npm/claude.cmd')}"
+    "$CLAUDE_CMD" -p \
         --dangerously-skip-permissions \
         --model "$DEFAULT_MODEL" \
         --verbose \

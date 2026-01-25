@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import Integer
 from sqlalchemy.orm import Session
 
 from app.core.config import StorageProvider, settings
@@ -15,6 +16,41 @@ from app.services.drawings import FileValidationError
 from app.services.storage import get_storage_service
 
 router = APIRouter(prefix="/drawings", tags=["drawings"])
+
+
+def calculate_progress_percentage(
+    status: DrawingStatus,
+    total_symbols: int = 0,
+    verified_symbols: int = 0,
+) -> int:
+    """
+    Calculate progress percentage based on drawing status and verification progress.
+
+    Progress mapping:
+    - uploaded: 0% (no processing started)
+    - processing: 50% (processing in progress)
+    - review: 80% + 20% * (verified_symbols / total_symbols) (verification progress)
+    - complete: 100% (all done)
+    - error: 0% (failed)
+
+    For review status, shows actual verification progress from 80% to 100%.
+    """
+    if status == DrawingStatus.complete:
+        return 100
+    elif status == DrawingStatus.error:
+        return 0
+    elif status == DrawingStatus.uploaded:
+        return 0
+    elif status == DrawingStatus.processing:
+        return 50
+    elif status == DrawingStatus.review:
+        # Calculate verification progress (80-100%)
+        if total_symbols == 0:
+            return 80  # No symbols to verify, show base progress
+        verification_ratio = verified_symbols / total_symbols
+        return min(100, 80 + int(20 * verification_ratio))
+    else:
+        return 0
 
 
 class DrawingResponse(BaseModel):
@@ -29,6 +65,7 @@ class DrawingResponse(BaseModel):
     updated_at: str
     processing_started_at: str | None
     processing_completed_at: str | None
+    progress_percentage: int  # 0-100, calculated from status and verification progress
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -101,6 +138,7 @@ async def upload_drawing(
             if drawing.processing_completed_at
             else None
         ),
+        progress_percentage=calculate_progress_percentage(drawing.status),
     )
 
 
@@ -112,7 +150,9 @@ async def list_drawings(
     skip: int = 0,
     limit: int = 100,
 ) -> list[DrawingResponse]:
-    """List all drawings for a project."""
+    """List all drawings for a project with progress percentage."""
+    from sqlalchemy import func
+
     # Check project access
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
@@ -121,6 +161,28 @@ async def list_drawings(
         raise HTTPException(status_code=403, detail="Access denied")
 
     drawings = await drawing_service.get_drawings_by_project(db, project_id, skip, limit)
+
+    # Get symbol verification stats for drawings in review status (efficient batch query)
+    review_drawing_ids = [d.id for d in drawings if d.status == DrawingStatus.review]
+    symbol_stats: dict[UUID, tuple[int, int]] = {}  # {drawing_id: (total, verified)}
+
+    if review_drawing_ids:
+        # Batch query for symbol counts per drawing
+        stats_query = (
+            db.query(
+                Symbol.drawing_id,
+                func.count(Symbol.id).label("total"),
+                func.sum(func.cast(Symbol.is_verified, Integer)).label("verified"),
+            )
+            .filter(
+                Symbol.drawing_id.in_(review_drawing_ids),
+                Symbol.is_deleted == False,  # noqa: E712
+            )
+            .group_by(Symbol.drawing_id)
+            .all()
+        )
+        for row in stats_query:
+            symbol_stats[row.drawing_id] = (row.total, row.verified or 0)
 
     return [
         DrawingResponse(
@@ -139,6 +201,11 @@ async def list_drawings(
             processing_completed_at=(
                 d.processing_completed_at.isoformat() if d.processing_completed_at else None
             ),
+            progress_percentage=calculate_progress_percentage(
+                d.status,
+                total_symbols=symbol_stats.get(d.id, (0, 0))[0],
+                verified_symbols=symbol_stats.get(d.id, (0, 0))[1],
+            ),
         )
         for d in drawings
     ]
@@ -151,7 +218,9 @@ async def get_drawing(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> DrawingWithUrlResponse:
-    """Get a drawing by ID with download URL."""
+    """Get a drawing by ID with download URL and progress percentage."""
+    from sqlalchemy import func
+
     drawing = await drawing_service.get_drawing(db, drawing_id)
     if not drawing:
         raise HTTPException(status_code=404, detail="Drawing not found")
@@ -172,6 +241,21 @@ async def get_drawing(
     except Exception:
         download_url = None
 
+    # Calculate progress based on verification status
+    total_symbols = 0
+    verified_symbols = 0
+    if drawing.status == DrawingStatus.review:
+        stats = db.query(
+            func.count(Symbol.id).label("total"),
+            func.sum(func.cast(Symbol.is_verified, Integer)).label("verified"),
+        ).filter(
+            Symbol.drawing_id == drawing_id,
+            Symbol.is_deleted == False,  # noqa: E712
+        ).first()
+        if stats:
+            total_symbols = stats.total or 0
+            verified_symbols = stats.verified or 0
+
     return DrawingWithUrlResponse(
         id=str(drawing.id),
         project_id=str(drawing.project_id),
@@ -191,6 +275,11 @@ async def get_drawing(
             else None
         ),
         download_url=download_url,
+        progress_percentage=calculate_progress_percentage(
+            drawing.status,
+            total_symbols=total_symbols,
+            verified_symbols=verified_symbols,
+        ),
     )
 
 

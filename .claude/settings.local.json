@@ -27,7 +27,18 @@
       "Bash(git -C D:/Flowex status)",
       "Bash(powershell -Command \"cd D:\\\\Flowex\\\\backend; .\\\\.venv\\\\Scripts\\\\activate; python -c \"\"from app.ml.inference import download_model_from_supabase; print\\(''OK''\\)\"\"\")",
       "Bash(powershell -Command \"cd D:\\\\Flowex\\\\backend; .\\\\.venv\\\\Scripts\\\\activate; python -m mypy app/ml/inference.py --ignore-missing-imports\")",
-      "Bash(pushd:*)"
+      "Bash(pushd:*)",
+      "Bash(echo:*)",
+      "Bash(cmd.exe /c \"claude --version\")",
+      "Bash(C:/Users/staff/AppData/Roaming/npm/claude.cmd --version)",
+      "Bash(CLAUDE_CMD=\"C:/Users/staff/AppData/Roaming/npm/claude.cmd\")",
+      "Bash(\"$CLAUDE_CMD\" --version)",
+      "Bash(export CLAUDE_CMD=\"C:/Users/staff/AppData/Roaming/npm/claude.cmd\")",
+      "Bash(tee:*)",
+      "Bash(C:/Users/staff/AppData/Roaming/npm/claude.cmd -p --dangerously-skip-permissions)",
+      "Bash(git -C D:/Flowex log --oneline -5)",
+      "Bash(git -C D:/Flowex add ml/test_model.py)",
+      "Bash(git -C D:/Flowex commit -m \"$\\(cat <<''EOF''\ntest\\(ml\\): add validation tests for symbol detection model\n\nTests model loading, forward pass, dataset loading, and mobile model\ninference to verify ML pipeline functionality.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }
