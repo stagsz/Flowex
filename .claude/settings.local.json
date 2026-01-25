@@ -53,7 +53,11 @@
       "Bash(D:/Flowex/.venv/Scripts/alembic.exe upgrade:*)",
       "Bash(npm audit:*)",
       "Bash(D:/Flowex/.venv/Scripts/python.exe -m uvicorn:*)",
-      "mcp__MCP_DOCKER__browser_navigate"
+      "mcp__MCP_DOCKER__browser_navigate",
+      "Bash(git -C D:/Flowex status -sb)",
+      "Bash(git -C D:/Flowex log origin/master..HEAD --oneline)",
+      "Bash(git -C D:/Flowex diff --stat)",
+      "Bash(git -C D:/Flowex diff backend/app/api/routes/users.py)"
     ]
   }
 }
