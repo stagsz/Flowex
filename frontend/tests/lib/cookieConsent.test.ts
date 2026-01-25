@@ -10,6 +10,7 @@ import {
   COOKIE_CONSENT_KEY,
   COOKIE_CONSENT_VERSION,
   DEFAULT_CONSENT,
+  COOKIE_CATEGORIES,
 } from '@/lib/cookieConsent'
 
 describe('cookieConsent', () => {
@@ -181,12 +182,10 @@ describe('cookieConsent', () => {
 
   describe('COOKIE_CATEGORIES', () => {
     it('should have necessary category as non-disableable', () => {
-      const { COOKIE_CATEGORIES } = require('@/lib/cookieConsent')
       expect(COOKIE_CATEGORIES.necessary.canDisable).toBe(false)
     })
 
     it('should have other categories as disableable', () => {
-      const { COOKIE_CATEGORIES } = require('@/lib/cookieConsent')
       expect(COOKIE_CATEGORIES.analytics.canDisable).toBe(true)
       expect(COOKIE_CATEGORIES.functional.canDisable).toBe(true)
       expect(COOKIE_CATEGORIES.marketing.canDisable).toBe(true)
