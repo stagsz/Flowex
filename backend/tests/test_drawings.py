@@ -15,7 +15,9 @@ from app.api.routes.drawings import (
     LineUpdateRequest,
     TitleBlockResponse,
     _extract_title_block_from_texts,
+    calculate_progress_percentage,
 )
+from app.models import DrawingStatus
 from app.main import app
 from app.services.drawings import MAX_FILE_SIZE, FileValidationError, validate_file
 
@@ -102,6 +104,66 @@ class TestStoragePathGeneration:
         parts = path.split("/")
         assert parts[0] == "organizations"
         assert len(parts) >= 5  # organizations, org_id, year, month, day, filename
+
+
+class TestProgressPercentage:
+    """Tests for progress percentage calculation (DB-02)."""
+
+    def test_complete_status_is_100(self):
+        """Complete drawings should show 100% progress."""
+        progress = calculate_progress_percentage(DrawingStatus.complete)
+        assert progress == 100
+
+    def test_error_status_is_0(self):
+        """Error drawings should show 0% progress."""
+        progress = calculate_progress_percentage(DrawingStatus.error)
+        assert progress == 0
+
+    def test_uploaded_status_is_0(self):
+        """Uploaded drawings should show 0% progress."""
+        progress = calculate_progress_percentage(DrawingStatus.uploaded)
+        assert progress == 0
+
+    def test_processing_status_is_50(self):
+        """Processing drawings should show 50% progress."""
+        progress = calculate_progress_percentage(DrawingStatus.processing)
+        assert progress == 50
+
+    def test_review_status_no_symbols_is_80(self):
+        """Review drawings with no symbols should show 80% progress."""
+        progress = calculate_progress_percentage(
+            DrawingStatus.review, total_symbols=0, verified_symbols=0
+        )
+        assert progress == 80
+
+    def test_review_status_all_verified_is_100(self):
+        """Review drawings with all symbols verified should show 100% progress."""
+        progress = calculate_progress_percentage(
+            DrawingStatus.review, total_symbols=10, verified_symbols=10
+        )
+        assert progress == 100
+
+    def test_review_status_half_verified_is_90(self):
+        """Review drawings with half symbols verified should show 90% progress."""
+        progress = calculate_progress_percentage(
+            DrawingStatus.review, total_symbols=10, verified_symbols=5
+        )
+        assert progress == 90
+
+    def test_review_status_no_verified_is_80(self):
+        """Review drawings with no symbols verified should show 80% progress."""
+        progress = calculate_progress_percentage(
+            DrawingStatus.review, total_symbols=10, verified_symbols=0
+        )
+        assert progress == 80
+
+    def test_review_status_progress_capped_at_100(self):
+        """Progress should never exceed 100%."""
+        # Edge case: more verified than total (shouldn't happen but safety check)
+        progress = calculate_progress_percentage(
+            DrawingStatus.review, total_symbols=5, verified_symbols=10
+        )
+        assert progress == 100
 
 
 class TestBulkVerifyRequest:
