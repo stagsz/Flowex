@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { FeedbackWidget } from "@/components/feedback/FeedbackWidget"
 import { useAuthStore } from "@/stores/authStore"
-import { LogOut, Settings, User, HelpCircle } from "lucide-react"
+import { LogOut, Settings, User, HelpCircle, History } from "lucide-react"
 
 export function Header() {
   const { user, logout } = useAuthStore()
@@ -74,6 +74,12 @@ export function Header() {
                 <Link to="/profile">
                   <User className="mr-2 h-4 w-4" />
                   <span>Profile</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/my-activity">
+                  <History className="mr-2 h-4 w-4" />
+                  <span>My Activity</span>
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>

@@ -1,10 +1,11 @@
-"""User endpoints for GDPR compliance (data export, account deletion)."""
+"""User endpoints for GDPR compliance (data export, account deletion) and activity logs."""
 
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
@@ -19,6 +20,7 @@ from app.models import (
     TextAnnotation,
     User,
 )
+from app.models.audit_log import AuditAction, AuditLog
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -182,6 +184,29 @@ class AccountDeletionResponse(BaseModel):
     deletion_scheduled_at: datetime
     grace_period_days: int = 30
     data_to_be_deleted: list[str]
+
+
+class UserActivityItem(BaseModel):
+    """Single activity log entry for user activity history."""
+
+    id: str
+    action: str
+    entity_type: str | None
+    entity_id: str | None
+    ip_address: str | None
+    metadata: dict[str, str] | None
+    timestamp: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserActivityListResponse(BaseModel):
+    """Paginated list of user activity entries."""
+
+    items: list[UserActivityItem]
+    total: int
+    page: int
+    page_size: int
 
 
 # =============================================================================
@@ -481,4 +506,71 @@ async def request_account_deletion(
         deletion_scheduled_at=deletion_date,
         grace_period_days=30,
         data_to_be_deleted=data_to_be_deleted,
+    )
+
+
+def _serialize_activity_item(log: AuditLog) -> UserActivityItem:
+    """Serialize an audit log entry for user activity response."""
+    return UserActivityItem(
+        id=str(log.id),
+        action=log.action.value,
+        entity_type=log.entity_type.value if log.entity_type else None,
+        entity_id=str(log.entity_id) if log.entity_id else None,
+        ip_address=log.ip_address,
+        metadata=log.extra_data,
+        timestamp=log.timestamp,
+    )
+
+
+@router.get("/me/activity", response_model=UserActivityListResponse)
+@limiter.limit(default_limit)
+async def get_user_activity(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    start_date: datetime | None = Query(None, description="Filter from date (inclusive)"),
+    end_date: datetime | None = Query(None, description="Filter to date (inclusive)"),
+    action: AuditAction | None = Query(None, description="Filter by action type"),
+) -> UserActivityListResponse:
+    """Get the current user's activity history (UM-05).
+
+    Returns a paginated list of the authenticated user's actions.
+    This is a user-facing endpoint that allows users to see their own activity.
+
+    Query parameters:
+    - page: Page number (default: 1)
+    - page_size: Items per page (default: 25, max: 100)
+    - start_date: Filter logs from this date (ISO 8601 format)
+    - end_date: Filter logs until this date (ISO 8601 format)
+    - action: Filter by action type (e.g., login, drawing_upload)
+    """
+    # Build query for current user's activity
+    query = db.query(AuditLog).filter(AuditLog.user_id == current_user.id)
+
+    # Apply filters
+    if start_date:
+        query = query.filter(AuditLog.timestamp >= start_date)
+    if end_date:
+        query = query.filter(AuditLog.timestamp <= end_date)
+    if action:
+        query = query.filter(AuditLog.action == action)
+
+    # Get total count
+    total = query.count()
+
+    # Get paginated results (most recent first)
+    logs = (
+        query.order_by(desc(AuditLog.timestamp))
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return UserActivityListResponse(
+        items=[_serialize_activity_item(log) for log in logs],
+        total=total,
+        page=page,
+        page_size=page_size,
     )

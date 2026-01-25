@@ -17,6 +17,7 @@ const SettingsIntegrationsPage = lazy(() => import("@/pages/SettingsIntegrations
 const BetaAdminPage = lazy(() => import("@/pages/BetaAdminPage").then(m => ({ default: m.BetaAdminPage })))
 const AuditLogsPage = lazy(() => import("@/pages/AuditLogsPage").then(m => ({ default: m.AuditLogsPage })))
 const OrganizationMembersPage = lazy(() => import("@/pages/OrganizationMembersPage").then(m => ({ default: m.OrganizationMembersPage })))
+const MyActivityPage = lazy(() => import("@/pages/MyActivityPage").then(m => ({ default: m.MyActivityPage })))
 
 function PageLoadingFallback() {
   return (
@@ -124,6 +125,7 @@ function App() {
               <Route path="/admin/beta" element={<BetaAdminPage />} />
               <Route path="/admin/audit-logs" element={<AuditLogsPage />} />
               <Route path="/admin/members" element={<OrganizationMembersPage />} />
+              <Route path="/my-activity" element={<MyActivityPage />} />
             </Route>
 
             {/* Redirects */}

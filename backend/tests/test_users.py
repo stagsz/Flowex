@@ -1,4 +1,4 @@
-"""Tests for GDPR user endpoints (data export, account deletion)."""
+"""Tests for GDPR user endpoints (data export, account deletion) and activity logs."""
 
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
@@ -24,6 +24,7 @@ from app.models import (
     User,
     UserRole,
 )
+from app.models.audit_log import AuditAction, AuditLog, EntityType
 
 client = TestClient(app)
 
@@ -500,3 +501,191 @@ class TestGDPREndpointMetadata:
         data_export_path = schema["paths"].get("/api/v1/users/me/data-export", {})
         get_op = data_export_path.get("get", {})
         assert "users" in get_op.get("tags", [])
+
+
+class TestUserActivityAuth:
+    """Test user activity endpoint authentication."""
+
+    def test_user_activity_requires_auth(self):
+        """Test user activity endpoint requires authentication."""
+        response = client.get("/api/v1/users/me/activity")
+        assert response.status_code == 403
+
+    def test_user_activity_invalid_token(self):
+        """Test user activity with invalid token returns 401."""
+        response = client.get(
+            "/api/v1/users/me/activity",
+            headers={"Authorization": "Bearer invalid_token"},
+        )
+        assert response.status_code == 401
+
+
+class TestUserActivitySuccess:
+    """Test user activity endpoint with mocked authentication."""
+
+    def _create_mock_user(self) -> User:
+        """Create a mock user for testing."""
+        user = MagicMock(spec=User)
+        user.id = uuid4()
+        user.email = "test@example.com"
+        user.name = "Test User"
+        user.role = UserRole.MEMBER
+        user.organization_id = uuid4()
+        return user
+
+    def _create_mock_audit_log(self, user_id, action: AuditAction) -> AuditLog:
+        """Create a mock audit log entry."""
+        log = MagicMock(spec=AuditLog)
+        log.id = uuid4()
+        log.user_id = user_id
+        log.action = action
+        log.entity_type = EntityType.DRAWING
+        log.entity_id = uuid4()
+        log.ip_address = "127.0.0.1"
+        log.extra_data = {"filename": "test.pdf"}
+        log.timestamp = datetime.now(UTC)
+        return log
+
+    def test_user_activity_returns_list(self):
+        """Test user activity endpoint returns paginated list."""
+        user = self._create_mock_user()
+        mock_log = self._create_mock_audit_log(user.id, AuditAction.DRAWING_UPLOAD)
+
+        # Create mock DB session
+        mock_db = MagicMock()
+        mock_query = MagicMock()
+        mock_db.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.count.return_value = 1
+        mock_query.all.return_value = [mock_log]
+
+        # Override dependencies
+        app.dependency_overrides[get_current_user] = lambda: user
+        app.dependency_overrides[get_db] = lambda: mock_db
+
+        try:
+            response = client.get("/api/v1/users/me/activity")
+            assert response.status_code == 200
+            data = response.json()
+            assert "items" in data
+            assert "total" in data
+            assert "page" in data
+            assert "page_size" in data
+            assert data["total"] == 1
+            assert len(data["items"]) == 1
+            assert data["items"][0]["action"] == "drawing_upload"
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_user_activity_pagination(self):
+        """Test user activity endpoint pagination parameters."""
+        user = self._create_mock_user()
+
+        # Create mock DB session
+        mock_db = MagicMock()
+        mock_query = MagicMock()
+        mock_db.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.count.return_value = 0
+        mock_query.all.return_value = []
+
+        # Override dependencies
+        app.dependency_overrides[get_current_user] = lambda: user
+        app.dependency_overrides[get_db] = lambda: mock_db
+
+        try:
+            response = client.get("/api/v1/users/me/activity?page=2&page_size=10")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["page"] == 2
+            assert data["page_size"] == 10
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_user_activity_filter_by_action(self):
+        """Test user activity endpoint action filter."""
+        user = self._create_mock_user()
+        mock_log = self._create_mock_audit_log(user.id, AuditAction.LOGIN)
+
+        # Create mock DB session
+        mock_db = MagicMock()
+        mock_query = MagicMock()
+        mock_db.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.count.return_value = 1
+        mock_query.all.return_value = [mock_log]
+
+        # Override dependencies
+        app.dependency_overrides[get_current_user] = lambda: user
+        app.dependency_overrides[get_db] = lambda: mock_db
+
+        try:
+            response = client.get("/api/v1/users/me/activity?action=login")
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data["items"]) == 1
+            assert data["items"][0]["action"] == "login"
+        finally:
+            app.dependency_overrides.clear()
+
+
+class TestUserActivityResponseStructure:
+    """Test user activity response structure validation."""
+
+    def test_response_model_activity_item(self):
+        """Test UserActivityItem model structure."""
+        from app.api.routes.users import UserActivityItem
+
+        item = UserActivityItem(
+            id="test-id",
+            action="drawing_upload",
+            entity_type="drawing",
+            entity_id="entity-123",
+            ip_address="127.0.0.1",
+            metadata={"filename": "test.pdf"},
+            timestamp=datetime.now(UTC),
+        )
+        assert item.id == "test-id"
+        assert item.action == "drawing_upload"
+        assert item.metadata["filename"] == "test.pdf"
+
+    def test_response_model_activity_list(self):
+        """Test UserActivityListResponse model structure."""
+        from app.api.routes.users import UserActivityItem, UserActivityListResponse
+
+        response = UserActivityListResponse(
+            items=[
+                UserActivityItem(
+                    id="item-1",
+                    action="login",
+                    entity_type=None,
+                    entity_id=None,
+                    ip_address="192.168.1.1",
+                    metadata=None,
+                    timestamp=datetime.now(UTC),
+                )
+            ],
+            total=1,
+            page=1,
+            page_size=25,
+        )
+        assert response.total == 1
+        assert response.page == 1
+        assert len(response.items) == 1
+
+    def test_activity_endpoint_exists_in_openapi(self):
+        """Test user activity endpoint is registered in OpenAPI."""
+        response = client.get("/openapi.json")
+        assert response.status_code == 200
+        schema = response.json()
+        assert "/api/v1/users/me/activity" in schema["paths"]
+        assert "get" in schema["paths"]["/api/v1/users/me/activity"]
