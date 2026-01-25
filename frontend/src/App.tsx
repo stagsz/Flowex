@@ -2,6 +2,7 @@ import { useEffect, lazy, Suspense } from "react"
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import * as Sentry from "@sentry/react"
 import { MainLayout } from "@/components/layout"
+import { CookieConsentBanner } from "@/components/consent"
 import { useAuthStore } from "@/stores/authStore"
 
 // Lazy-loaded page components for code splitting
@@ -135,4 +136,13 @@ function App() {
   )
 }
 
-export default App
+function AppWithConsent() {
+  return (
+    <>
+      <App />
+      <CookieConsentBanner />
+    </>
+  )
+}
+
+export default AppWithConsent
