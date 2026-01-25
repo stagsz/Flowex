@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.models.beta_feedback import BetaFeedback
     from app.models.organization import Organization
     from app.models.project_member import ProjectMember
+    from app.models.security_breach import SecurityBreach
 
 
 class UserRole(str, enum.Enum):
@@ -67,4 +68,7 @@ class User(Base, UUIDMixin, TimestampMixin):
         foreign_keys="ProjectMember.user_id",
         back_populates="user",
         cascade="all, delete-orphan",
+    )
+    reported_breaches: Mapped[list["SecurityBreach"]] = relationship(
+        "SecurityBreach", back_populates="reported_by"
     )

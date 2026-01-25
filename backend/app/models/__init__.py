@@ -14,6 +14,12 @@ from app.models.organization import Organization, SubscriptionTier
 from app.models.organization_invite import InviteStatus, OrganizationInvite
 from app.models.project import Project
 from app.models.project_member import ProjectMember, ProjectRole
+from app.models.security_breach import (
+    BreachCategory,
+    BreachSeverity,
+    BreachStatus,
+    SecurityBreach,
+)
 from app.models.symbol import Symbol, SymbolCategory
 from app.models.text_annotation import TextAnnotation
 from app.models.user import SSOProvider, User, UserRole
@@ -46,4 +52,8 @@ __all__ = [
     "FeedbackType",
     "FeedbackPriority",
     "FeedbackStatus",
+    "SecurityBreach",
+    "BreachSeverity",
+    "BreachStatus",
+    "BreachCategory",
 ]

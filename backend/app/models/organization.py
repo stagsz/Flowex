@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from app.models.beta_feedback import BetaFeedback
     from app.models.organization_invite import OrganizationInvite
     from app.models.project import Project
+    from app.models.security_breach import SecurityBreach
     from app.models.user import User
 
 
@@ -45,4 +46,7 @@ class Organization(Base, UUIDMixin, TimestampMixin):
     )
     audit_logs: Mapped[list["AuditLog"]] = relationship(
         "AuditLog", back_populates="organization", cascade="all, delete-orphan"
+    )
+    security_breaches: Mapped[list["SecurityBreach"]] = relationship(
+        "SecurityBreach", back_populates="organization", cascade="all, delete-orphan"
     )

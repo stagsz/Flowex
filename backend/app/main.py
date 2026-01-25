@@ -9,6 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.routes import (
     auth,
+    breaches,
     cloud,
     drawings,
     exports,
@@ -171,6 +172,7 @@ app.include_router(cloud.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(organizations.router, prefix="/api/v1")
 app.include_router(feedback.router, prefix="/api/v1")
+app.include_router(breaches.router, prefix="/api/v1")
 
 
 @app.get("/health")

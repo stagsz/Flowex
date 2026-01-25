@@ -68,6 +68,13 @@ class AuditAction(str, Enum):
     DATA_EXPORT_REQUEST = "data_export_request"
     ACCOUNT_DELETION_REQUEST = "account_deletion_request"
 
+    # Security breach operations (GDPR Article 33)
+    BREACH_REPORTED = "breach_reported"
+    BREACH_UPDATED = "breach_updated"
+    BREACH_AUTHORITY_NOTIFIED = "breach_authority_notified"
+    BREACH_USERS_NOTIFIED = "breach_users_notified"
+    BREACH_RESOLVED = "breach_resolved"
+
 
 class EntityType(str, Enum):
     """Entity types for audit log entries."""
@@ -82,6 +89,7 @@ class EntityType(str, Enum):
     CLOUD_CONNECTION = "cloud_connection"
     INVITE = "invite"
     EXPORT_JOB = "export_job"
+    SECURITY_BREACH = "security_breach"
 
 
 class AuditLog(Base, UUIDMixin):
