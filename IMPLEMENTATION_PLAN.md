@@ -553,6 +553,18 @@ _None_
   - Privacy Policy link for transparency
   - Full accessibility support (ARIA roles, keyboard navigation)
   - 39 tests for utilities and component behavior
+- [x] Implement data retention policies (GDPR-08) - `fdbd100`
+  - Added retention configuration settings to config.py (RETENTION_ENABLED, etc.)
+  - Drawing model: added last_accessed_at field for access tracking
+  - User model: added scheduled_deletion_at and deletion_reason fields
+  - Created Alembic migration 006 for retention fields
+  - Implemented retention Celery tasks:
+    - cleanup_old_drawings (daily at 2 AM) - deletes drawings after 1 year
+    - purge_old_audit_logs (monthly on 1st) - purges logs after 3 years
+    - process_scheduled_deletions (daily at 4 AM) - anonymizes users
+  - Configured Celery beat scheduler for automated retention jobs
+  - Updated drawing access tracking in API routes
+  - 20 tests for retention functionality
 
 #### 8.3 Deployment
 - [x] Set up CI/CD pipeline - `8dcd214`
