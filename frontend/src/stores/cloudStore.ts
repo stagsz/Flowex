@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { persist } from "zustand/middleware"
 
 export type CloudProvider = "onedrive" | "sharepoint" | "google_drive"
 
@@ -35,6 +36,14 @@ export interface BrowseResult {
   files: CloudFile[]
 }
 
+// Last accessed folder info to remember user's browsing position
+export interface LastAccessedFolder {
+  folderId: string
+  folderName: string
+  folderPath: string
+  accessedAt: string
+}
+
 interface CloudState {
   connections: CloudConnection[]
   isLoading: boolean
@@ -43,6 +52,8 @@ interface CloudState {
   browseResult: BrowseResult | null
   selectedFiles: CloudFile[]
   folderHistory: CloudFolder[]
+  // Persisted: map of connectionId -> last accessed folder
+  lastAccessedFolders: Record<string, LastAccessedFolder>
 
   // Actions
   fetchConnections: () => Promise<void>
@@ -58,11 +69,14 @@ interface CloudState {
   importFiles: (connectionId: string, fileIds: string[], projectId: string) => Promise<string>
   exportFiles: (connectionId: string, drawingId: string, folderId: string, files: string[]) => Promise<string>
   createFolder: (connectionId: string, parentId: string, name: string) => Promise<CloudFolder>
+  getLastAccessedFolder: (connectionId: string) => LastAccessedFolder | null
 }
 
 const API_BASE = "/api/v1/cloud"
 
-export const useCloudStore = create<CloudState>()((set, get) => ({
+export const useCloudStore = create<CloudState>()(
+  persist(
+    (set, get) => ({
   connections: [],
   isLoading: false,
   error: null,
@@ -70,6 +84,7 @@ export const useCloudStore = create<CloudState>()((set, get) => ({
   browseResult: null,
   selectedFiles: [],
   folderHistory: [],
+  lastAccessedFolders: {},
 
   fetchConnections: async () => {
     set({ isLoading: true, error: null })
@@ -132,7 +147,7 @@ export const useCloudStore = create<CloudState>()((set, get) => ({
       if (!response.ok) throw new Error("Failed to browse folder")
       const result: BrowseResult = await response.json()
 
-      // Update folder history
+      // Update folder history and save last accessed folder
       const currentFolder = result.currentFolder
       if (currentFolder) {
         set((state) => {
@@ -146,10 +161,24 @@ export const useCloudStore = create<CloudState>()((set, get) => ({
               return { browseResult: result, isLoading: false, folderHistory: [] }
             }
           }
-          return { browseResult: result, isLoading: false, folderHistory: history }
+          // Save last accessed folder for this connection
+          const lastAccessedFolders = {
+            ...state.lastAccessedFolders,
+            [connectionId]: {
+              folderId: currentFolder.id,
+              folderName: currentFolder.name,
+              folderPath: currentFolder.path,
+              accessedAt: new Date().toISOString(),
+            },
+          }
+          return { browseResult: result, isLoading: false, folderHistory: history, lastAccessedFolders }
         })
       } else {
-        set({ browseResult: result, isLoading: false })
+        // At root, clear last accessed folder
+        set((state) => {
+          const { [connectionId]: _, ...restFolders } = state.lastAccessedFolders
+          return { browseResult: result, isLoading: false, lastAccessedFolders: restFolders }
+        })
       }
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
@@ -278,4 +307,17 @@ export const useCloudStore = create<CloudState>()((set, get) => ({
       throw error
     }
   },
-}))
+
+  getLastAccessedFolder: (connectionId: string) => {
+    return get().lastAccessedFolders[connectionId] || null
+  },
+}),
+    {
+      name: "flowex-cloud-storage",
+      // Only persist the lastAccessedFolders map
+      partialize: (state) => ({
+        lastAccessedFolders: state.lastAccessedFolders,
+      }),
+    }
+  )
+)

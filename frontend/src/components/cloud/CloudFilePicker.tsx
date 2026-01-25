@@ -57,6 +57,7 @@ export function CloudFilePicker({
     isLoading,
     folderHistory,
     goBack,
+    getLastAccessedFolder,
   } = useCloudStore()
 
   const [searchQuery, setSearchQuery] = useState("")
@@ -64,12 +65,20 @@ export function CloudFilePicker({
 
   useEffect(() => {
     if (open && connection) {
-      browse(connection.id)
+      // Check if there's a last accessed folder for this connection
+      const lastFolder = getLastAccessedFolder(connection.id)
+      if (lastFolder) {
+        // Navigate to the last accessed folder
+        browse(connection.id, lastFolder.folderId)
+      } else {
+        // Fall back to root
+        browse(connection.id)
+      }
       clearSelection()
       setSearchQuery("")
       setSearchResults(null)
     }
-  }, [open, connection, browse, clearSelection])
+  }, [open, connection, browse, clearSelection, getLastAccessedFolder])
 
   const handleFolderClick = (folder: CloudFolder) => {
     if (connection) {

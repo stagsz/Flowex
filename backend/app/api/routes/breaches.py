@@ -327,12 +327,12 @@ async def get_breach_stats(
     # Calculate average time to containment
     contained = [
         b for b in breaches
-        if b.contained_at is not None
+        if b.contained_at is not None and b.detected_at is not None
     ]
     avg_containment = None
     if contained:
         containment_times = [
-            (b.contained_at - b.detected_at).total_seconds() / 3600
+            (b.contained_at - b.detected_at).total_seconds() / 3600  # type: ignore[operator]
             for b in contained
         ]
         avg_containment = round(sum(containment_times) / len(containment_times), 1)
@@ -340,12 +340,12 @@ async def get_breach_stats(
     # Calculate average time to resolution
     resolved = [
         b for b in breaches
-        if b.resolved_at is not None
+        if b.resolved_at is not None and b.detected_at is not None
     ]
     avg_resolution = None
     if resolved:
         resolution_times = [
-            (b.resolved_at - b.detected_at).total_seconds() / 3600
+            (b.resolved_at - b.detected_at).total_seconds() / 3600  # type: ignore[operator]
             for b in resolved
         ]
         avg_resolution = round(sum(resolution_times) / len(resolution_times), 1)

@@ -32,6 +32,7 @@ export function CloudFolderPicker({
     folderHistory,
     goBack,
     createFolder,
+    getLastAccessedFolder,
   } = useCloudStore()
 
   const [newFolderName, setNewFolderName] = useState("")
@@ -40,12 +41,20 @@ export function CloudFolderPicker({
 
   useEffect(() => {
     if (open && connection) {
-      browse(connection.id)
+      // Check if there's a last accessed folder for this connection
+      const lastFolder = getLastAccessedFolder(connection.id)
+      if (lastFolder) {
+        // Navigate to the last accessed folder
+        browse(connection.id, lastFolder.folderId)
+      } else {
+        // Fall back to root
+        browse(connection.id)
+      }
       setSelectedFolder(null)
       setNewFolderName("")
       setShowNewFolder(false)
     }
-  }, [open, connection, browse])
+  }, [open, connection, browse, getLastAccessedFolder])
 
   const handleFolderClick = (folder: CloudFolder) => {
     if (connection) {
