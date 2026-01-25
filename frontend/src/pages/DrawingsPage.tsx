@@ -100,8 +100,8 @@ export function DrawingsPage() {
                   name: d.original_filename,
                   projectName: project.name,
                   status: d.status as Drawing["status"],
-                  progress: d.progress_percentage ?? 0,  // Use real progress from API
-                  symbolsDetected: 0, // Would come from symbols API
+                  progress: d.progress_percentage ?? 0,
+                  symbolsDetected: d.symbols_detected ?? 0,
                   createdAt: new Date(d.created_at).toLocaleDateString(),
                   processedAt: d.processing_completed_at
                     ? new Date(d.processing_completed_at).toLocaleDateString()

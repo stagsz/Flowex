@@ -134,7 +134,7 @@ export function AuditLogsPage() {
   const isAdmin = user && (user.role === "admin" || user.role === "owner")
 
   const fetchLogs = useCallback(async () => {
-    if (!user?.organization_id) return
+    if (!user?.organizationId) return
 
     setIsLoading(true)
     setError(null)
@@ -159,7 +159,7 @@ export function AuditLogsPage() {
       }
 
       const res = await api.get(
-        `/api/v1/organizations/${user.organization_id}/audit-logs?${params}`
+        `/api/v1/organizations/${user.organizationId}/audit-logs?${params}`
       )
 
       if (!res.ok) {
@@ -189,7 +189,7 @@ export function AuditLogsPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [user?.organization_id, page, pageSize, actionFilter, startDate, endDate, userSearch])
+  }, [user?.organizationId, page, pageSize, actionFilter, startDate, endDate, userSearch])
 
   useEffect(() => {
     if (!isAdmin) return

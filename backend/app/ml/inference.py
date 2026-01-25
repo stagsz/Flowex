@@ -374,6 +374,7 @@ def get_inference_service() -> InferenceService:
     global _inference_service
     if _inference_service is None:
         model_path = settings.ML_MODEL_LOCAL_PATH
+        confidence_threshold = settings.ML_CONFIDENCE_THRESHOLD
 
         # Check if model exists locally
         if not Path(model_path).exists():
@@ -386,9 +387,13 @@ def get_inference_service() -> InferenceService:
 
         # Initialize service with model path (or None if download failed)
         if Path(model_path).exists():
-            _inference_service = InferenceService(model_path=model_path)
+            _inference_service = InferenceService(
+                model_path=model_path,
+                confidence_threshold=confidence_threshold,
+            )
+            logger.info(f"Inference service initialized with confidence threshold: {confidence_threshold}")
         else:
             logger.warning("No model available, inference will return empty results")
-            _inference_service = InferenceService()
+            _inference_service = InferenceService(confidence_threshold=confidence_threshold)
 
     return _inference_service

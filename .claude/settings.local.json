@@ -38,7 +38,22 @@
       "Bash(C:/Users/staff/AppData/Roaming/npm/claude.cmd -p --dangerously-skip-permissions)",
       "Bash(git -C D:/Flowex log --oneline -5)",
       "Bash(git -C D:/Flowex add ml/test_model.py)",
-      "Bash(git -C D:/Flowex commit -m \"$\\(cat <<''EOF''\ntest\\(ml\\): add validation tests for symbol detection model\n\nTests model loading, forward pass, dataset loading, and mobile model\ninference to verify ML pipeline functionality.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git -C D:/Flowex commit -m \"$\\(cat <<''EOF''\ntest\\(ml\\): add validation tests for symbol detection model\n\nTests model loading, forward pass, dataset loading, and mobile model\ninference to verify ML pipeline functionality.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C D:/Flowex push)",
+      "Bash(where:*)",
+      "Bash(command -v:*)",
+      "Bash(git -C D:/Flowex diff loop.sh)",
+      "Bash(git -C D:/Flowex log --oneline -5 -- loop.sh)",
+      "Bash(git -C D:/Flowex show 4046910 --stat -- loop.sh)",
+      "Bash(/c/Users/staff/AppData/Roaming/npm/claude -v)",
+      "Bash(alembic heads:*)",
+      "Bash(D:/Flowex/.venv/Scripts/pip.exe install:*)",
+      "Bash(D:/Flowex/.venv/Scripts/alembic.exe current:*)",
+      "Bash(D:/Flowex/.venv/Scripts/alembic.exe heads:*)",
+      "Bash(D:/Flowex/.venv/Scripts/alembic.exe upgrade:*)",
+      "Bash(npm audit:*)",
+      "Bash(D:/Flowex/.venv/Scripts/python.exe -m uvicorn:*)",
+      "mcp__MCP_DOCKER__browser_navigate"
     ]
   }
 }

@@ -73,6 +73,7 @@ class DrawingResponse(BaseModel):
     processing_started_at: str | None
     processing_completed_at: str | None
     progress_percentage: int  # 0-100, calculated from status and verification progress
+    symbols_detected: int = 0  # Total number of symbols detected
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -213,6 +214,7 @@ async def list_drawings(
                 total_symbols=symbol_stats.get(d.id, (0, 0))[0],
                 verified_symbols=symbol_stats.get(d.id, (0, 0))[1],
             ),
+            symbols_detected=symbol_stats.get(d.id, (0, 0))[0],
         )
         for d in drawings
     ]

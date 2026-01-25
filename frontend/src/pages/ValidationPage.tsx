@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useParams, Link } from "react-router-dom"
 import { Document, Page, pdfjs } from "react-pdf"
 import "react-pdf/dist/Page/AnnotationLayer.css"
@@ -77,8 +77,8 @@ interface EditAction {
   previousStates?: DetectedSymbol[]
 }
 
-// Set up PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+// Set up PDF.js worker - use local file to avoid CORS/CDN issues
+pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs"
 
 interface DetectedSymbol {
   id: string
@@ -837,6 +837,12 @@ export function ValidationPage() {
     name: "Loading...",
     projectName: "",
   })
+
+  // Memoized PDF.js options to prevent unnecessary reloads
+  const pdfOptions = useMemo(() => ({
+    cMapUrl: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/cmaps/`,
+    cMapPacked: true,
+  }), [])
 
   // Fetch drawing details and PDF URL
   useEffect(() => {
@@ -2082,6 +2088,7 @@ export function ValidationPage() {
                   file={pdfUrl}
                   onLoadSuccess={onDocumentLoadSuccess}
                   onLoadError={onDocumentLoadError}
+                  options={pdfOptions}
                   loading={
                     <div className="flex items-center justify-center p-20">
                       <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

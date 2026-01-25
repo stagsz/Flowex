@@ -85,7 +85,7 @@ class Settings(BaseSettings):
     ML_MODEL_BUCKET: str = "models"  # Supabase bucket for ML models
     ML_MODEL_PATH: str = "best_model.pt"  # Path to model in bucket (trained on real P&ID data)
     ML_MODEL_LOCAL_PATH: str = "/tmp/best_model.pt"  # Local cache path
-    ML_CONFIDENCE_THRESHOLD: float = 0.25  # Min confidence for symbol detection (lower = more detections)
+    ML_CONFIDENCE_THRESHOLD: float = 0.35  # Min confidence for symbol detection (0.35 balances recall vs false positives)
 
     # Authentication Provider: "supabase" or "auth0"
     AUTH_PROVIDER: str = "supabase"

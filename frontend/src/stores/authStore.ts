@@ -12,7 +12,7 @@ const DEV_USER: User = {
   email: "dev@flowex.local",
   name: "Dev User",
   role: "admin",
-  organizationId: "dev-org-id",
+  organizationId: "263d7cd1-7e5c-45fa-a604-98145e996211",
   organizationName: "Dev Organization",
 }
 
