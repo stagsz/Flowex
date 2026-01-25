@@ -31,6 +31,7 @@ import {
   Archive,
   Trash2,
   AlertTriangle,
+  Users,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -39,6 +40,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { api } from "@/lib/api"
+import { ProjectMembersDialog } from "@/components/ProjectMembersDialog"
 
 interface Project {
   id: string
@@ -72,6 +74,10 @@ export function ProjectsPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Members dialog state
+  const [isMembersDialogOpen, setIsMembersDialogOpen] = useState(false)
+  const [membersProject, setMembersProject] = useState<Project | null>(null)
 
   // Fetch projects from API
   useEffect(() => {
@@ -193,6 +199,11 @@ export function ProjectsPage() {
     setEditProjectDescription(project.description)
     setEditError(null)
     setIsEditDialogOpen(true)
+  }
+
+  const openMembersDialog = (project: Project) => {
+    setMembersProject(project)
+    setIsMembersDialogOpen(true)
   }
 
   const updateProject = async () => {
@@ -389,6 +400,10 @@ export function ProjectsPage() {
                       <Pencil className="mr-2 h-4 w-4" />
                       Edit
                     </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => openMembersDialog(project)}>
+                      <Users className="mr-2 h-4 w-4" />
+                      Members
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => archiveProject(project)}>
                       <Archive className="mr-2 h-4 w-4" />
                       Archive
@@ -541,6 +556,21 @@ export function ProjectsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Project Members Dialog */}
+      {membersProject && (
+        <ProjectMembersDialog
+          projectId={membersProject.id}
+          projectName={membersProject.name}
+          open={isMembersDialogOpen}
+          onOpenChange={(open) => {
+            setIsMembersDialogOpen(open)
+            if (!open) {
+              setMembersProject(null)
+            }
+          }}
+        />
+      )}
     </div>
   )
 }
